@@ -13,11 +13,13 @@ export default function InterviewApp() {
     const [isListening, setIsListening] = useState(false);
     const [history, setHistory] = useState([]);
     const [isMounted, setIsMounted] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(120); // 2 Minute Timer
+    const [timeLeft, setTimeLeft] = useState(120); 
+    
+    // 👇 ADD THIS EXACT LINE BELOW 👇
+    const [errorMessage, setErrorMessage] = useState(""); 
     
     const messagesEndRef = useRef(null);
     const timerRef = useRef(null);
-    const isErrorActive = errorMessage?.includes("Server is busy");
 
     // 2. INITIAL LOAD
     useEffect(() => {
