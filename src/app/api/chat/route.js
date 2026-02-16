@@ -1,138 +1,44 @@
-export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export async function POST(req) {
-  console.log("--- API KEY STATUS ---", !!process.env.GEMINI_API_KEY);
-
   try {
-    const body = (await req.json().catch(() => ({}))) || {};
-    const { message, role, level, questionCount = 0 } = body;
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { text: "Server misconfiguration: GEMINI_API_KEY is not set." },
-        { status: 500 }
-      );
-    }
-
-    if (!message || typeof message !== "string" || !message.trim()) {
-      return NextResponse.json(
-        { text: "Invalid request: message is required." },
-        { status: 400 }
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const safeRole = role || "technical";
-    const safeLevel = level || "Junior";
-    const safeQuestionCount =
-      typeof questionCount === "number" && questionCount >= 0
-        ? questionCount
-        : 0;
-
-    const prompt = `You are a strict ${safeLevel} level technical interviewer for ${safeRole}. So far you have asked ${safeQuestionCount} question(s). Keep the interview focused and ask one clear question or give brief feedback. Reply in markdown. Be concise. User said: ${message.trim()}`;
-
-    const primaryModelId = "gemini-2.5-flash-lite";
-    const fallbackModelId = "gemini-3-flash-preview";
-
-    const callModel = async (modelId) => {
-      // 1. Initialize the model with the "System Instruction" (The Rules)
-      const model = genAI.getGenerativeModel({ 
-        model: modelId,
-        systemInstruction: `You are a professional Technical Interviewer. 
-        1. Conduct a mock interview by asking one question at a time.
-        2. After the user answers 5 or 6 questions, you MUST stop the interview.
-        3. Do not ask another question. Instead, provide a Detailed Feedback Report including Strengths, Areas for Improvement, and an Overall Grade.`
-      });
+    const { messages } = await req.json();
     
-      // 2. Generate the content
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      return response.text();
-    };
-    let text;
+    // Only send the last 10 messages so we don't hit the "Server Busy" quota
+    const recentMessages = messages.slice(-10);
 
-    try {
-      text = await callModel(primaryModelId);
-    } catch (modelError) {
-      const msg = modelError?.message?.toString().toLowerCase() ?? "";
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      systemInstruction: "You are a Technical Interviewer. After 6 questions, stop and give a report."
+    });
 
-      if (
-        msg.includes("429") ||
-        msg.includes("rate limit") ||
-        msg.includes("quota") ||
-        msg.includes("limit: 0")
-      ) {
-        return NextResponse.json(
-          { text: "Server is busy. Please try again in 1 minute." },
-          { status: 429 }
-        );
-      }
+    // START STREAMING
+    const result = await model.generateContentStream({
+      contents: recentMessages.map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }],
+      })),
+    });
 
-      try {
-        text = await callModel(fallbackModelId);
-      } catch (fallbackError) {
-        const fbMsg = fallbackError?.message?.toString().toLowerCase() ?? "";
-
-        if (
-          fbMsg.includes("429") ||
-          fbMsg.includes("rate limit") ||
-          fbMsg.includes("quota") ||
-          fbMsg.includes("limit: 0")
-        ) {
-          return NextResponse.json(
-            { text: "Server is busy. Please try again in 1 minute." },
-            { status: 429 }
-          );
+    // This converts the stream into a format the browser understands
+    const stream = new ReadableStream({
+      async start(controller) {
+        for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          controller.enqueue(new TextEncoder().encode(chunkText));
         }
-
-        return NextResponse.json(
-          {
-            text:
-              fallbackError?.message ||
-              "AI model is currently unavailable. Please try again later.",
-          },
-          { status: 500 }
-        );
-      }
-    }
-
-    if (!text) {
-      return NextResponse.json(
-        { text: "I couldn't generate a response. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ text });
-  } catch (error) {
-    const msg = error?.message?.toString().toLowerCase() ?? "";
-
-    if (
-      msg.includes("429") ||
-      msg.includes("rate limit") ||
-      msg.includes("quota") ||
-      msg.includes("limit: 0")
-    ) {
-      return NextResponse.json(
-        { text: "Server is busy. Please try again in 1 minute." },
-        { status: 429 }
-      );
-    }
-
-    console.error("--- SERVER CRASH LOG ---");
-    console.error(error?.message);
-
-    return NextResponse.json(
-      {
-        text:
-          error?.message ||
-          "Something went wrong on the server. Please try again.",
+        controller.close();
       },
-      { status: 500 }
-    );
+    });
+
+    return new Response(stream);
+
+  } catch (error) {
+    console.error("STREAM ERROR:", error);
+    return new Response("The server is currently busy. Try a shorter message.", { status: 503 });
   }
 }

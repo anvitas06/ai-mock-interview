@@ -91,46 +91,62 @@ export default function InterviewApp() {
     const handleSend = async (overrideMessage = null) => {
         const userMessage = overrideMessage || input;
         if (!userMessage.trim() || loading) return;
-
+    
         clearInterval(timerRef.current);
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
         
+        // 1. Add User Message and setup empty AI message
         setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
         setInput("");
         setLoading(true);
-
+    
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: userMessage,
+                    messages: [...messages, { role: 'user', content: userMessage }], // Send the full history
                     role: selectedRole,
                     level: level,
                     questionCount: aiMessageCount,
                 }),
             });
-
-            const data = await response.json().catch(() => ({}));
-
+    
             if (!response.ok) {
-                const errorText = data.text || `Server Error: ${response.status}`;
-                setMessages(prev => [...prev, { role: 'ai', text: `❌ ${errorText}` }]);
-                if (response.status === 500) {
-                    console.error("Server error:", errorText);
-                }
-                return;
+                throw new Error(`Server Error: ${response.status}`);
             }
-
-            setMessages(prev => [...prev, { role: 'ai', text: data.text }]);
-
-            // End interview if score is mentioned or we hit 5 questions
-            if (data.text?.toLowerCase().includes("score") || aiMessageCount >= 5) {
-                saveToHistory(data.text);
+    
+            // 2. SETUP THE STREAM READER
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let done = false;
+            let accumulatedText = "";
+    
+            // Add a placeholder AI message that we will fill up
+            setMessages(prev => [...prev, { role: 'ai', text: "" }]);
+    
+            while (!done) {
+                const { value, done: doneReading } = await reader.read();
+                done = doneReading;
+                const chunkValue = decoder.decode(value);
+                accumulatedText += chunkValue;
+    
+                // 3. Update the last message (the AI one) with the new text
+                setMessages(prev => {
+                    const updatedMessages = [...prev];
+                    updatedMessages[updatedMessages.length - 1].text = accumulatedText;
+                    return updatedMessages;
+                });
             }
+    
+            // 4. End interview logic (after stream is finished)
+            if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 5) {
+                saveToHistory(accumulatedText);
+            }
+    
         } catch (error) {
             console.error("DEBUG:", error);
-            setMessages(prev => [...prev, { role: 'ai', text: "❌ Connection Error. Please check your API key and Internet." }]);
+            setMessages(prev => [...prev, { role: 'ai', text: `❌ ${error.message}` }]);
         } finally {
             setLoading(false);
         }
