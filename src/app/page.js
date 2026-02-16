@@ -194,7 +194,7 @@ export default function InterviewApp() {
                                 {isListening ? '🛑' : '🎙️'}
                             </button>
 
-                            <button onClick={() => handleSend()} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '25px', padding: '12px 30px', cursor: 'pointer', fontWeight: 'bold', transition: '0.2s' }}>SEND</button>
+                            <button onClick={() => handleSend()} disabled={loading} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '25px', padding: '12px 30px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold', transition: '0.2s', opacity: loading ? 0.6 : 1 }}>SEND</button>
                         </div>
                     </>
                 )}
