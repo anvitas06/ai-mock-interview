@@ -12,7 +12,7 @@ export async function POST(req) {
     const recentMessages = messages.slice(-10);
 
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-flash",
+      model: "gemini-1.5-flash",
       systemInstruction: "You are a Technical Interviewer. After 6 questions, stop and give a report."
     });
 
