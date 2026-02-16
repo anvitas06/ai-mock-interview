@@ -39,12 +39,20 @@ export async function POST(req) {
     const fallbackModelId = "gemini-3-flash-preview";
 
     const callModel = async (modelId) => {
-      const model = genAI.getGenerativeModel({ model: modelId });
+      // 1. Initialize the model with the "System Instruction" (The Rules)
+      const model = genAI.getGenerativeModel({ 
+        model: modelId,
+        systemInstruction: `You are a professional Technical Interviewer. 
+        1. Conduct a mock interview by asking one question at a time.
+        2. After the user answers 5 or 6 questions, you MUST stop the interview.
+        3. Do not ask another question. Instead, provide a Detailed Feedback Report including Strengths, Areas for Improvement, and an Overall Grade.`
+      });
+    
+      // 2. Generate the content
       const result = await model.generateContent(prompt);
       const response = result.response;
       return response.text();
     };
-
     let text;
 
     try {
