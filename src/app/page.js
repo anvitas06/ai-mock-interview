@@ -71,13 +71,13 @@ useEffect(() => {
     };
 
     // 7. LOGIC: SEND MESSAGE
+    // 7. LOGIC: SEND MESSAGE
     const handleSend = async (overrideMessage = null) => {
         const userMessage = overrideMessage || input;
         if (!userMessage.trim() || loading) return;
     
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
         
-        // 1. Add User Message and setup empty AI message
         setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
         setInput("");
         setLoading(true);
@@ -87,24 +87,24 @@ useEffect(() => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    messages: [...messages, { role: 'user', content: userMessage }], // Send the full history
+                    messages: [...messages, { role: 'user', text: userMessage }], // Changed content to text for consistency
                     role: selectedRole,
                     level: level,
                     questionCount: aiMessageCount,
                 }),
             });
     
+            // IF SERVER RETURNS AN ERROR
             if (!response.ok) {
-                throw new Error(`Server Error: ${response.status}`);
+                const errorBody = await response.text(); // Get the message from route.js
+                throw new Error(errorBody || `Server Error: ${response.status}`);
             }
     
-            // 2. SETUP THE STREAM READER
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let done = false;
             let accumulatedText = "";
     
-            // Add a placeholder AI message that we will fill up
             setMessages(prev => [...prev, { role: 'ai', text: "" }]);
     
             while (!done) {
@@ -113,7 +113,6 @@ useEffect(() => {
                 const chunkValue = decoder.decode(value);
                 accumulatedText += chunkValue;
     
-                // 3. Update the last message (the AI one) with the new text
                 setMessages(prev => {
                     const updatedMessages = [...prev];
                     updatedMessages[updatedMessages.length - 1].text = accumulatedText;
@@ -121,20 +120,21 @@ useEffect(() => {
                 });
             }
     
-            // 4. End interview logic (after stream is finished)
             if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 5) {
                 saveToHistory(accumulatedText);
             }
     
         } catch (error) {
             console.error("DEBUG:", error);
-            setErrorMessage(error.message); // Add this line!
-            setMessages(prev => [...prev, { role: 'ai', text: `❌ ${error.message}` }]);
+            // This now displays the REAL error message we sent from route.js
+            setMessages(prev => [...prev, { 
+                role: 'ai', 
+                text: `❌ **System Message:** ${error.message}` 
+            }]);
         } finally {
             setLoading(false);
         }
     };
-
     if (!isMounted) return null;
 
     return (
