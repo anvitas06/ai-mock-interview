@@ -26,28 +26,35 @@ export default function InterviewApp() {
     }, []);
 
     // 3. AUTO-SCROLL & TIMER LOGIC
-    useEffect(() => {
-        if (view === 'interview') {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+useEffect(() => {
+    if (view === 'interview') {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        
+        // ADDED CHECK: Only start timer if there's no error and it's not currently loading
+        const isErrorActive = errorMessage?.includes("Server is busy");
+
+        if (messages.length > 0 && messages[messages.length - 1].role === 'ai' && !loading && !isErrorActive) {
+            setTimeLeft(120); 
             
-            // Start/Reset Timer when AI speaks
-            if (messages.length > 0 && messages[messages.length - 1].role === 'ai' && !loading) {
-                setTimeLeft(120); 
-                if (timerRef.current) clearInterval(timerRef.current);
-                timerRef.current = setInterval(() => {
-                    setTimeLeft((prev) => {
-                        if (prev <= 1) {
-                            clearInterval(timerRef.current);
+            if (timerRef.current) clearInterval(timerRef.current);
+            
+            timerRef.current = setInterval(() => {
+                setTimeLeft((prev) => {
+                    if (prev <= 1) {
+                        clearInterval(timerRef.current);
+                        // Only send the "Time up" message if the server is healthy
+                        if (!isErrorActive) {
                             handleSend("Time up: I didn't answer in time.");
-                            return 0;
                         }
-                        return prev - 1;
-                    });
-                }, 1000);
-            }
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
         }
-        return () => clearInterval(timerRef.current);
-    }, [messages, loading, view]);
+    }
+    return () => clearInterval(timerRef.current);
+}, [messages, loading, view, errorMessage]); // Added errorMessage to the dependency array
 
     // 4. LOGIC: START INTERVIEW
     const startInterview = (role) => {
