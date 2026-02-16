@@ -14,9 +14,6 @@ export default function InterviewApp() {
     const [history, setHistory] = useState([]);
     const [isMounted, setIsMounted] = useState(false);
     
-    // 👇 ADD THIS EXACT LINE BELOW 👇
-    const [errorMessage, setErrorMessage] = useState(""); 
-    
     const messagesEndRef = useRef(null);
 
     // 2. INITIAL LOAD
@@ -26,12 +23,12 @@ export default function InterviewApp() {
         setHistory(saved);
     }, []);
 
-// 3. AUTO-SCROLL LOGIC (Timer Removed)
-useEffect(() => {
-    if (view === 'interview') {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-}, [messages, view]);
+    // 3. AUTO-SCROLL
+    useEffect(() => {
+        if (view === 'interview') {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [messages, view]);
     // 4. LOGIC: START INTERVIEW
     const startInterview = (role) => {
         setSelectedRole(role);
@@ -87,7 +84,7 @@ useEffect(() => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    messages: [...messages, { role: 'user', text: userMessage }], // Changed content to text for consistency
+                    messages: [...messages, { role: 'user', text: userMessage }],
                     role: selectedRole,
                     level: level,
                     questionCount: aiMessageCount,
@@ -126,10 +123,9 @@ useEffect(() => {
     
         } catch (error) {
             console.error("DEBUG:", error);
-            // This now displays the REAL error message we sent from route.js
             setMessages(prev => [...prev, { 
                 role: 'ai', 
-                text: `❌ **System Message:** ${error.message}` 
+                text: error.message 
             }]);
         } finally {
             setLoading(false);

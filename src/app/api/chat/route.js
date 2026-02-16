@@ -7,9 +7,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 export async function POST(req) {
   try {
     const { messages } = await req.json();
-    
-    // Only send the last 10 messages so we don't hit the "Server Busy" quota
-    const recentMessages = messages.slice(-10);
 
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
@@ -18,9 +15,9 @@ export async function POST(req) {
 
     // START STREAMING
     const result = await model.generateContentStream({
-      contents: recentMessages.map(m => ({
-        role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user',
-        parts: [{ text: String(m.content || m.text) }], // Must be an array with a text object
+      contents: messages.map(m => ({
+        role: m.role === 'ai' ? 'model' : 'user',
+        parts: [{ text: m.text }],
       })),
     });
 
@@ -39,7 +36,6 @@ export async function POST(req) {
 
   } catch (error) {
     console.error("DEBUG:", error);
-    // This will tell you the REAL error (e.g. "Model not found")
-    return new Response(`Error: ${error.message}`, { status: 500 });
+    return new Response(error.message, { status: 500 });
   }
 }
