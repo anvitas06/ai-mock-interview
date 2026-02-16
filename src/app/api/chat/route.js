@@ -38,8 +38,8 @@ export async function POST(req) {
     return new Response(stream);
 
   } catch (error) {
-    console.error("STREAM ERROR:", error);
-    // This will send the ACTUAL error message to your frontend
+    console.error("DEBUG:", error);
+    // This will tell you the REAL error (e.g. "Model not found")
     return new Response(`Error: ${error.message}`, { status: 500 });
   }
 }
