@@ -68,17 +68,15 @@ export default function InterviewApp() {
     };
 
     // 7. LOGIC: SEND MESSAGE
-    // 7. LOGIC: SEND MESSAGE
     const handleSend = async (overrideMessage = null) => {
-        const userMessage = overrideMessage || input;
-        if (!userMessage.trim() || loading) return;
-        console.log('Front-end sending:', userMessage);
+        if (loading || !((overrideMessage ?? input) || '').toString().trim()) return;
+        setLoading(true);
+        const userMessage = (overrideMessage ?? input).toString().trim();
+        console.log('[Frontend] Request START:', userMessage);
     
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
-        
         setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
         setInput("");
-        setLoading(true);
     
         try {
             const response = await fetch('/api/chat', {
@@ -92,9 +90,9 @@ export default function InterviewApp() {
                 }),
             });
     
-            // IF SERVER RETURNS AN ERROR
             if (!response.ok) {
-                const errorBody = await response.text(); // Get the message from route.js
+                let errorBody = await response.text();
+                try { const j = JSON.parse(errorBody); errorBody = j.error || j.message || errorBody; } catch (_) {}
                 throw new Error(errorBody || `Server Error: ${response.status}`);
             }
     
@@ -121,9 +119,10 @@ export default function InterviewApp() {
             if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 5) {
                 saveToHistory(accumulatedText);
             }
-    
+            console.log('[Frontend] Request FINISH: success');
         } catch (error) {
-            setMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + error.message }]);
+            setMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}. Please wait a moment before trying again.` }]);
+            console.log('[Frontend] Request FINISH: error', error.message);
         } finally {
             setLoading(false);
         }
