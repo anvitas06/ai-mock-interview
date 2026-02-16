@@ -12,15 +12,15 @@ export async function POST(req) {
     const recentMessages = messages.slice(-10);
 
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash",
       systemInstruction: "You are a Technical Interviewer. After 6 questions, stop and give a report."
     });
 
     // START STREAMING
     const result = await model.generateContentStream({
       contents: recentMessages.map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }],
+        role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user',
+        parts: [{ text: String(m.content || m.text) }], // Must be an array with a text object
       })),
     });
 
