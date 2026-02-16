@@ -1,4 +1,4 @@
-export const runtime = 'nodejs
+export const runtime = 'nodejs';
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -16,8 +16,8 @@ export async function POST(req) {
     // START STREAMING
     const result = await model.generateContentStream({
       contents: messages.map(m => ({
-        role: m.role === 'ai' ? 'model' : 'user',
-        parts: [{ text: m.text }],
+        role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user',
+        parts: [{ text: String(m.parts?.[0]?.text ?? m.text ?? '') }],
       })),
     });
 

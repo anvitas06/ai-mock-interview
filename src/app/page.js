@@ -72,6 +72,7 @@ export default function InterviewApp() {
     const handleSend = async (overrideMessage = null) => {
         const userMessage = overrideMessage || input;
         if (!userMessage.trim() || loading) return;
+        console.log('Front-end sending:', userMessage);
     
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
         
@@ -122,11 +123,7 @@ export default function InterviewApp() {
             }
     
         } catch (error) {
-            console.error("DEBUG:", error);
-            setMessages(prev => [...prev, { 
-                role: 'ai', 
-                text: error.message 
-            }]);
+            setMessages(prev => [...prev, { role: 'ai', text: 'Error: ' + error.message }]);
         } finally {
             setLoading(false);
         }
