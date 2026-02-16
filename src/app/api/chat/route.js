@@ -39,6 +39,7 @@ export async function POST(req) {
 
   } catch (error) {
     console.error("STREAM ERROR:", error);
-    return new Response("The server is currently busy. Try a shorter message.", { status: 503 });
+    // This will send the ACTUAL error message to your frontend
+    return new Response(`Error: ${error.message}`, { status: 500 });
   }
 }

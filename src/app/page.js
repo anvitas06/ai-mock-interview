@@ -13,13 +13,11 @@ export default function InterviewApp() {
     const [isListening, setIsListening] = useState(false);
     const [history, setHistory] = useState([]);
     const [isMounted, setIsMounted] = useState(false);
-    const [timeLeft, setTimeLeft] = useState(120); 
     
     // 👇 ADD THIS EXACT LINE BELOW 👇
     const [errorMessage, setErrorMessage] = useState(""); 
     
     const messagesEndRef = useRef(null);
-    const timerRef = useRef(null);
 
     // 2. INITIAL LOAD
     useEffect(() => {
@@ -28,37 +26,12 @@ export default function InterviewApp() {
         setHistory(saved);
     }, []);
 
-    // 3. AUTO-SCROLL & TIMER LOGIC
+// 3. AUTO-SCROLL LOGIC (Timer Removed)
 useEffect(() => {
     if (view === 'interview') {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        
-        // ADDED CHECK: Only start timer if there's no error and it's not currently loading
-        const [errorMessage, setErrorMessage] = useState('');
-
-        if (messages.length > 0 && messages[messages.length - 1].role === 'ai' && !loading && !isErrorActive) {
-            setTimeLeft(120); 
-            
-            if (timerRef.current) clearInterval(timerRef.current);
-            
-            timerRef.current = setInterval(() => {
-                setTimeLeft((prev) => {
-                    if (prev <= 1) {
-                        clearInterval(timerRef.current);
-                        // Only send the "Time up" message if the server is healthy
-                        if (!isErrorActive) {
-                            handleSend("Time up: I didn't answer in time.");
-                        }
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-        }
     }
-    return () => clearInterval(timerRef.current);
-}, [messages, loading, view, errorMessage]); // Added errorMessage to the dependency array
-
+}, [messages, view]);
     // 4. LOGIC: START INTERVIEW
     const startInterview = (role) => {
         setSelectedRole(role);
@@ -102,7 +75,6 @@ useEffect(() => {
         const userMessage = overrideMessage || input;
         if (!userMessage.trim() || loading) return;
     
-        clearInterval(timerRef.current);
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
         
         // 1. Add User Message and setup empty AI message
@@ -200,9 +172,7 @@ useEffect(() => {
                                 <span style={{ color: '#38bdf8' }}>{level} Level</span>
                             </div>
                             <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                <div style={{ fontSize: '1.2rem', color: timeLeft < 20 ? '#ef4444' : '#fbbf24', fontWeight: 'bold', background: '#1e293b', padding: '10px', borderRadius: '10px', border: '1px solid #334155' }}>
-                                    ⏱ {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
-                                </div>
+                                
                                 <button onClick={() => { saveToHistory("User exited early", "N/A"); setView('landing'); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}>Quit</button>
                             </div>
                         </div>
