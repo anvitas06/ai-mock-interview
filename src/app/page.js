@@ -17,6 +17,7 @@ export default function InterviewApp() {
     
     const messagesEndRef = useRef(null);
     const timerRef = useRef(null);
+    const isErrorActive = errorMessage?.includes("Server is busy");
 
     // 2. INITIAL LOAD
     useEffect(() => {
@@ -31,7 +32,7 @@ useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         
         // ADDED CHECK: Only start timer if there's no error and it's not currently loading
-        const isErrorActive = errorMessage?.includes("Server is busy");
+        const [errorMessage, setErrorMessage] = useState('');
 
         if (messages.length > 0 && messages[messages.length - 1].role === 'ai' && !loading && !isErrorActive) {
             setTimeLeft(120); 
@@ -153,6 +154,7 @@ useEffect(() => {
     
         } catch (error) {
             console.error("DEBUG:", error);
+            setErrorMessage(error.message); // Add this line!
             setMessages(prev => [...prev, { role: 'ai', text: `❌ ${error.message}` }]);
         } finally {
             setLoading(false);
