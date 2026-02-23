@@ -10,11 +10,15 @@ export default function InterviewApp() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isSendCoolingDown, setIsSendCoolingDown] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [history, setHistory] = useState([]);
     const [isMounted, setIsMounted] = useState(false);
     
     const messagesEndRef = useRef(null);
+    
+    // 👉 NEW: The "pointer" that lets us kill the network request if the user interrupts
+    const abortControllerRef = useRef(null); 
 
     // 2. INITIAL LOAD
     useEffect(() => {
@@ -29,8 +33,13 @@ export default function InterviewApp() {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }
     }, [messages, view]);
+
     // 4. LOGIC: START INTERVIEW
     const startInterview = (role) => {
+        const unlock = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(unlock);
+    console.log("🔊 Audio Engine Unlocked");
+    
         setSelectedRole(role);
         setView('interview');
         setMessages([{ role: 'ai', text: `Hello. I am your **${level}** level Mentor for **${role}**. Question 1: Can you introduce yourself and tell me about your experience with ${role}?` }]);
@@ -56,7 +65,7 @@ export default function InterviewApp() {
         localStorage.setItem('interview_history', JSON.stringify(updated));
     };
 
-    // 6. LOGIC: VOICE INPUT
+    // 6. LOGIC: VOICE INPUT (Manual click for now)
     const startListening = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return alert("Browser not supported. Use Chrome!");
@@ -67,10 +76,73 @@ export default function InterviewApp() {
         recognition.start();
     };
 
+    // 👉 NEW: TEXT-TO-SPEECH HELPER
+    // This function actually makes the browser speak out loud.
+    const speakText = (text) => {
+        console.log("👉 Mentor is trying to say:", text);
+
+        // If the browser doesn't support speech synthesis, bail out early.
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+        // Clean markdown a bit before speaking.
+        const cleanText = text.replace(/\*/g, '').trim();
+        if (!cleanText) return;
+
+        // Create a new utterance for this chunk of text.
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 1.05; // Slightly faster to sound strict
+        utterance.pitch = 0.9; // Slightly lower pitch
+
+        // 🔒 GC-SAFETY HACK:
+        // Keep a global array of "active" utterances on window so that
+        // the JS engine cannot garbage-collect them while they are still playing.
+        if (!window.__activeUtterances) {
+            // We attach this only once for the lifetime of the page.
+            window.__activeUtterances = [];
+        }
+        window.__activeUtterances.push(utterance);
+
+        // Log what the browser audio engine is doing.
+        utterance.onend = () => {
+            console.log('[TTS] onend fired for utterance:', cleanText);
+            // Remove the finished utterance from the global array.
+            window.__activeUtterances = window.__activeUtterances.filter(u => u !== utterance);
+        };
+
+        utterance.onerror = (event) => {
+            console.log('[TTS] onerror fired for utterance:', cleanText, 'error:', event?.error || event);
+            // On error, also remove it from the global array.
+            window.__activeUtterances = window.__activeUtterances.filter(u => u !== utterance);
+        };
+
+        // Actually enqueue the utterance with the browser's speech engine.
+        window.speechSynthesis.speak(utterance);
+    };
+
+    // 👉 NEW: INTERRUPT AI HELPER
+    // We will call this later when the microphone detects the user speaking
+    const interruptAI = () => {
+        if (loading && abortControllerRef.current) {
+            console.log('[Frontend] User interrupted! Aborting request...');
+            abortControllerRef.current.abort();
+            window.speechSynthesis.cancel(); // Stop the audio playing
+        }
+    };
+
     // 7. LOGIC: SEND MESSAGE
     const handleSend = async (overrideMessage = null) => {
-        if (loading || !((overrideMessage ?? input) || '').toString().trim()) return;
+        // Prevent sending while already loading or during cooldown window
+        if (loading || isSendCoolingDown || !((overrideMessage ?? input) || '').toString().trim()) return;
+
+        // Start a 3s cooldown so the user cannot spam the API
+        setIsSendCoolingDown(true);
+        setTimeout(() => setIsSendCoolingDown(false), 3000);
+
         setLoading(true);
+        
+        // 👉 NEW: Initialize our "pointer" for this specific request
+        abortControllerRef.current = new AbortController(); 
+
         const userMessage = (overrideMessage ?? input).toString().trim();
         console.log('[Frontend] Request START:', userMessage);
     
@@ -82,6 +154,7 @@ export default function InterviewApp() {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: abortControllerRef.current.signal, // 👉 NEW: Attach the abort signal
                 body: JSON.stringify({
                     messages: [...messages, { role: 'user', text: userMessage }],
                     role: selectedRole,
@@ -100,6 +173,7 @@ export default function InterviewApp() {
             const decoder = new TextDecoder();
             let done = false;
             let accumulatedText = "";
+            let sentenceBuffer = ""; // 👉 NEW: Our Queue for text-to-speech
     
             setMessages(prev => [...prev, { role: 'ai', text: "" }]);
     
@@ -107,7 +181,17 @@ export default function InterviewApp() {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
                 const chunkValue = decoder.decode(value);
+                
                 accumulatedText += chunkValue;
+                sentenceBuffer += chunkValue; 
+    
+                // 👉 NEW: The Chunking Logic (Dequeue when we see punctuation)
+                const sentenceMatch = sentenceBuffer.match(/([^.?!]+[.?!]+)/);
+                if (sentenceMatch) {
+                    const completeSentence = sentenceMatch[1];
+                    speakText(completeSentence); // Speak the sentence!
+                    sentenceBuffer = sentenceBuffer.substring(sentenceMatch[0].length); // Remove it from buffer
+                }
     
                 setMessages(prev => {
                     const updatedMessages = [...prev];
@@ -116,13 +200,23 @@ export default function InterviewApp() {
                 });
             }
     
+            // 👉 NEW: Speak any leftover text that didn't have punctuation
+            if (sentenceBuffer.trim()) {
+                speakText(sentenceBuffer);
+            }
+    
             if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 5) {
                 saveToHistory(accumulatedText);
             }
             console.log('[Frontend] Request FINISH: success');
         } catch (error) {
-            setMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}. Please wait a moment before trying again.` }]);
-            console.log('[Frontend] Request FINISH: error', error.message);
+            // 👉 NEW: Gracefully handle the intentional Abort
+            if (error.name === 'AbortError') {
+                console.log('[Frontend] Request gracefully aborted.');
+            } else {
+                setMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}. Please wait a moment before trying again.` }]);
+                console.log('[Frontend] Request FINISH: error', error.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -193,7 +287,23 @@ export default function InterviewApp() {
                                 {isListening ? '🛑' : '🎙️'}
                             </button>
 
-                            <button onClick={() => handleSend()} disabled={loading} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '25px', padding: '12px 30px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold', transition: '0.2s', opacity: loading ? 0.6 : 1 }}>SEND</button>
+                            <button
+                                onClick={() => handleSend()}
+                                disabled={loading || isSendCoolingDown}
+                                style={{
+                                    background: '#0ea5e9',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '25px',
+                                    padding: '12px 30px',
+                                    cursor: (loading || isSendCoolingDown) ? 'not-allowed' : 'pointer',
+                                    fontWeight: 'bold',
+                                    transition: '0.2s',
+                                    opacity: (loading || isSendCoolingDown) ? 0.6 : 1,
+                                }}
+                            >
+                                SEND
+                            </button>
                         </div>
                     </>
                 )}
