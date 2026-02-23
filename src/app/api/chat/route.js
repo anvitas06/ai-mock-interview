@@ -1,7 +1,7 @@
 export const runtime = 'nodejs';
 
 import { streamText, convertToModelMessages } from 'ai';
-import { GoogleGenAI } from '@google/genai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 // CRITICAL: Validate API key immediately on module load
 if (!process.env.GEMINI_API_KEY) {
@@ -29,18 +29,16 @@ export async function POST(req) {
     const { messages } = await req.json();
     const recentMessages = messages.slice(-6);
 
-    // CRITICAL FIX: Configure client with apiVersion: 'v1' to prevent 404 errors
-    // This is mandatory because gemini-2.0-flash is only available in v1, not v1beta
-    const client = new GoogleGenAI({
+    // CRITICAL FIX: Use AI SDK Google provider configured for v1 API
+    // This fixes the 404 error by accessing gemini-2.0-flash via v1 instead of v1beta
+    const google = createGoogleGenerativeAI({
       apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        apiVersion: 'v1', // CRITICAL: Fixes 404 error by using correct API version
-      },
+      baseURL: 'https://generativelanguage.googleapis.com/v1', // CRITICAL: Use v1 API
     });
 
     // Use Vercel AI SDK for streaming with 2026 performance standard model
     const result = streamText({
-      model: client.chat('gemini-2.0-flash'), // 2026 performance standard
+      model: google('gemini-2.0-flash-exp'), // 2026 performance standard (use -exp suffix for latest)
       system: 'You are a Technical Interviewer. After 6 questions, stop and give a report.',
       messages: await convertToModelMessages(recentMessages),
       maxRetries: 2, // Automatic retry for transient failures
