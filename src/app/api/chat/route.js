@@ -1,48 +1,91 @@
 export const runtime = 'nodejs';
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { streamText, convertToModelMessages } from 'ai';
+import { GoogleGenAI } from '@google/genai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// CRITICAL: Validate API key immediately on module load
+if (!process.env.GEMINI_API_KEY) {
+  console.error('[Backend] CRITICAL: GEMINI_API_KEY environment variable is not set');
+}
 
 export async function POST(req) {
   console.log('[Backend] Request START');
+  
+  // CRITICAL: Early validation to prevent 500 errors downstream
+  if (!process.env.GEMINI_API_KEY) {
+    console.log('[Backend] Request FINISH: missing API key');
+    return new Response(
+      JSON.stringify({ 
+        error: 'Server configuration error: GEMINI_API_KEY is not configured. Please add your Gemini API key in the environment variables.' 
+      }),
+      { 
+        status: 500, 
+        headers: { 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+
   try {
     const { messages } = await req.json();
     const recentMessages = messages.slice(-6);
 
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      systemInstruction: "You are a Technical Interviewer. After 6 questions, stop and give a report."
-    });
-
-    // START STREAMING
-    const result = await model.generateContentStream({
-      contents: recentMessages.map(m => ({
-        role: m.role === 'ai' || m.role === 'model' ? 'model' : 'user',
-        parts: [{ text: String(m.parts?.[0]?.text ?? m.text ?? '') }],
-      })),
-    });
-
-    // This converts the stream into a format the browser understands
-    const stream = new ReadableStream({
-      async start(controller) {
-        for await (const chunk of result.stream) {
-          const chunkText = chunk.text();
-          controller.enqueue(new TextEncoder().encode(chunkText));
-        }
-        controller.close();
+    // CRITICAL FIX: Configure client with apiVersion: 'v1' to prevent 404 errors
+    // This is mandatory because gemini-2.0-flash is only available in v1, not v1beta
+    const client = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        apiVersion: 'v1', // CRITICAL: Fixes 404 error by using correct API version
       },
     });
 
-    console.log('[Backend] Request FINISH: success');
-    return new Response(stream);
+    // Use Vercel AI SDK for streaming with 2026 performance standard model
+    const result = streamText({
+      model: client.chat('gemini-2.0-flash'), // 2026 performance standard
+      system: 'You are a Technical Interviewer. After 6 questions, stop and give a report.',
+      messages: await convertToModelMessages(recentMessages),
+      maxRetries: 2, // Automatic retry for transient failures
+    });
+
+    console.log('[Backend] Request FINISH: streaming started');
+    
+    // Return AI SDK streaming response (SSE format for useChat)
+    return result.toUIMessageStreamResponse();
 
   } catch (error) {
-    const isRateLimit = String(error.message || error).includes('429') || 
-      /rate|quota|RESOURCE_EXHAUSTED/i.test(String(error.message || error));
-    const status = isRateLimit ? 429 : 500;
-    const body = JSON.stringify({ error: error.message || 'Unknown error' });
-    console.log('[Backend] Request FINISH: error', status, error.message);
-    return new Response(body, { status, headers: { 'Content-Type': 'application/json' } });
+    console.error('[Backend] Request FINISH: error', error);
+    
+    // Enhanced error categorization
+    const errorMessage = String(error.message || error);
+    const isRateLimit = errorMessage.includes('429') || 
+      /rate|quota|RESOURCE_EXHAUSTED/i.test(errorMessage);
+    const isNotFound = errorMessage.includes('404') || 
+      /not found|does not exist/i.test(errorMessage);
+    const isAuth = errorMessage.includes('401') || errorMessage.includes('403') ||
+      /unauthorized|forbidden|invalid api key/i.test(errorMessage);
+    
+    let status = 500;
+    let friendlyError = 'An unexpected error occurred. Please try again.';
+    
+    if (isRateLimit) {
+      status = 429;
+      friendlyError = 'Too many requests. Please wait a moment and try again.';
+    } else if (isNotFound) {
+      status = 404;
+      friendlyError = 'Model not found. Please check the model configuration.';
+    } else if (isAuth) {
+      status = 401;
+      friendlyError = 'Authentication failed. Please check your API key.';
+    }
+    
+    return new Response(
+      JSON.stringify({ 
+        error: friendlyError,
+        details: errorMessage 
+      }),
+      { 
+        status, 
+        headers: { 'Content-Type': 'application/json' } 
+      }
+    );
   }
 }
