@@ -16,6 +16,17 @@ export default function InterviewApp() {
     const [isMounted, setIsMounted] = useState(false);
     
     const messagesEndRef = useRef(null);
+    const getScoreColor = (scoreStr) => {
+        if (!scoreStr) return '#94a3b8';
+        // Extract just the first number found in the string
+        const match = scoreStr.match(/\d+/);
+        const score = match ? parseInt(match[0]) : NaN;
+        
+        if (isNaN(score)) return '#94a3b8'; 
+        if (score >= 8) return '#10b981';   
+        if (score >= 5) return '#fbbf24';   
+        return '#ef4444';                   
+    };
     
     // 👉 NEW: The "pointer" that lets us kill the network request if the user interrupts
     const abortControllerRef = useRef(null); 
@@ -130,22 +141,17 @@ export default function InterviewApp() {
     };
 
     // 7. LOGIC: SEND MESSAGE
+    // 7. LOGIC: SEND MESSAGE
     const handleSend = async (overrideMessage = null) => {
-        // Prevent sending while already loading or during cooldown window
         if (loading || isSendCoolingDown || !((overrideMessage ?? input) || '').toString().trim()) return;
 
-        // Start a 3s cooldown so the user cannot spam the API
         setIsSendCoolingDown(true);
         setTimeout(() => setIsSendCoolingDown(false), 3000);
 
         setLoading(true);
-        
-        // 👉 NEW: Initialize our "pointer" for this specific request
         abortControllerRef.current = new AbortController(); 
 
         const userMessage = (overrideMessage ?? input).toString().trim();
-        console.log('[Frontend] Request START:', userMessage);
-    
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
         setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
         setInput("");
@@ -154,7 +160,7 @@ export default function InterviewApp() {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                signal: abortControllerRef.current.signal, // 👉 NEW: Attach the abort signal
+                signal: abortControllerRef.current.signal,
                 body: JSON.stringify({
                     messages: [...messages, { role: 'user', text: userMessage }],
                     role: selectedRole,
@@ -164,8 +170,7 @@ export default function InterviewApp() {
             });
     
             if (!response.ok) {
-                let errorBody = await response.text();
-                try { const j = JSON.parse(errorBody); errorBody = j.error || j.message || errorBody; } catch (_) {}
+                const errorBody = await response.text();
                 throw new Error(errorBody || `Server Error: ${response.status}`);
             }
     
@@ -173,49 +178,52 @@ export default function InterviewApp() {
             const decoder = new TextDecoder();
             let done = false;
             let accumulatedText = "";
-            let sentenceBuffer = ""; // 👉 NEW: Our Queue for text-to-speech
+            let sentenceBuffer = ""; 
     
             setMessages(prev => [...prev, { role: 'ai', text: "" }]);
     
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
-                const chunkValue = decoder.decode(value);
-                
-                accumulatedText += chunkValue;
-                sentenceBuffer += chunkValue; 
-    
-                // 👉 NEW: The Chunking Logic (Dequeue when we see punctuation)
-                const sentenceMatch = sentenceBuffer.match(/([^.?!]+[.?!]+)/);
-                if (sentenceMatch) {
-                    const completeSentence = sentenceMatch[1];
-                    speakText(completeSentence); // Speak the sentence!
-                    sentenceBuffer = sentenceBuffer.substring(sentenceMatch[0].length); // Remove it from buffer
+                if (value) {
+                    const chunkValue = decoder.decode(value, { stream: true });
+                    
+                    // 🌟 THE X-RAY LOGGER: This will print every single word to your console
+                    console.log("🟢 SERVER SENT:", chunkValue);
+            
+                    const cleanChunk = chunkValue; 
+            
+                    accumulatedText += cleanChunk;
+                    sentenceBuffer += cleanChunk; 
+            
+                    const sentenceMatch = sentenceBuffer.match(/([^.?!]+[.?!]+)/);
+                    if (sentenceMatch) {
+                        const completeSentence = sentenceMatch[1];
+                        speakText(completeSentence);
+                        sentenceBuffer = sentenceBuffer.substring(sentenceMatch[0].length);
+                    }
+            
+                    setMessages(prev => {
+                        const updatedMessages = [...prev];
+                        updatedMessages[updatedMessages.length - 1].text = accumulatedText;
+                        return updatedMessages;
+                    });
                 }
-    
-                setMessages(prev => {
-                    const updatedMessages = [...prev];
-                    updatedMessages[updatedMessages.length - 1].text = accumulatedText;
-                    return updatedMessages;
-                });
             }
     
-            // 👉 NEW: Speak any leftover text that didn't have punctuation
             if (sentenceBuffer.trim()) {
                 speakText(sentenceBuffer);
             }
     
-            if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 5) {
+            // Logic for the 4-question report
+            if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 3) {
                 saveToHistory(accumulatedText);
             }
-            console.log('[Frontend] Request FINISH: success');
         } catch (error) {
-            // 👉 NEW: Gracefully handle the intentional Abort
             if (error.name === 'AbortError') {
-                console.log('[Frontend] Request gracefully aborted.');
+                console.log('[Frontend] Aborted.');
             } else {
-                setMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}. Please wait a moment before trying again.` }]);
-                console.log('[Frontend] Request FINISH: error', error.message);
+                setMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}` }]);
             }
         } finally {
             setLoading(false);
@@ -270,11 +278,22 @@ export default function InterviewApp() {
 
                         {/* Chat Box */}
                         <div style={{ height: '480px', overflowY: 'auto', background: '#1e293b', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid #334155' }}>
-                            {messages.map((m, i) => (
-                                <div key={i} style={{ alignSelf: m.role === 'ai' ? 'flex-start' : 'flex-end', background: m.role === 'ai' ? '#334155' : '#0ea5e9', padding: '15px', borderRadius: '15px', maxWidth: '85%', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                                    <ReactMarkdown>{m.text}</ReactMarkdown>
-                                </div>
-                            ))}
+                        {messages.map((m, i) => (
+    <div key={i} style={{ 
+        alignSelf: m.role === 'ai' ? 'flex-start' : 'flex-end', 
+        
+        /* --- ADD THIS LINE BELOW --- */
+        borderLeft: m.text.includes('/10') ? `4px solid ${getScoreColor(m.text)}` : 'none',
+        
+        background: m.role === 'ai' ? '#334155' : '#0ea5e9', 
+        padding: '15px', 
+        borderRadius: '15px', 
+        maxWidth: '85%', 
+        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' 
+    }}>
+        <ReactMarkdown>{m.text}</ReactMarkdown>
+    </div>
+))}
                             {loading && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Mentor is thinking...</div>}
                             <div ref={messagesEndRef} />
                         </div>
@@ -323,7 +342,25 @@ export default function InterviewApp() {
                                             <h3 style={{ margin: 0, color: '#38bdf8' }}>{item.role} ({item.level})</h3>
                                             <span style={{ color: '#64748b', fontSize: '0.9rem' }}>{item.date}</span>
                                         </div>
-                                        <div style={{ marginTop: '10px', color: '#fbbf24', fontWeight: 'bold', fontSize: '1.1rem' }}>{item.score}</div>
+                                        <div style={{ 
+    marginTop: '10px', 
+    color: getScoreColor(item.score), // 👈 Dynamic color!
+    fontWeight: 'bold', 
+    fontSize: '1.2rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+}}>
+    {/* Adding a small dot indicator for extra professional look */}
+    <span style={{ 
+        height: '10px', 
+        width: '10px', 
+        borderRadius: '50%', 
+        background: getScoreColor(item.score) 
+    }}></span>
+    {item.score}
+</div>
+                                        
                                     </div>
                                 ))}
                             </div>
