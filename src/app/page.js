@@ -123,36 +123,24 @@ export default function InterviewApp() {
     };
 
     // 👉 TEXT-TO-SPEECH HELPER
-    // 👉 TEXT-TO-SPEECH HELPER
-    const speakText = (text) => { // 👈 Change 'kText' back to 'const speakText'
-        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const speakText = (text) => {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
         
-        if (window.speechSynthesis.speaking) {
-            // Optional: window.speechSynthesis.cancel(); 
-        }
+        // Cancel any current speaking to prevent overlapping/stuck audio
+        window.speechSynthesis.cancel(); 
     
         const cleanText = text.replace(/\*/g, '').trim();
         if (!cleanText) return;
-
+    
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 1.05; 
-        utterance.pitch = 0.9; 
-
-        if (!window.__activeUtterances) {
-            window.__activeUtterances = [];
-        } 
+        utterance.rate = 1.0; 
         
-        window.__activeUtterances.push(utterance);
-
-        utterance.onend = () => {
-            window.__activeUtterances = window.__activeUtterances.filter(u => u !== utterance);
-        };
-
-        utterance.onerror = (event) => {
-            window.__activeUtterances = window.__activeUtterances.filter(u => u !== utterance);
-        };
-
+        // Pick a specific voice to ensure it's not "waiting" for a default
+        const voices = window.speechSynthesis.getVoices();
+        utterance.voice = voices.find(v => v.lang.includes('en-US')) || voices[0];
+    
         window.speechSynthesis.speak(utterance);
+        console.log("🔊 Actually speaking now:", cleanText);
     };
 
     // 👉 INTERRUPT AI HELPER
@@ -197,7 +185,7 @@ export default function InterviewApp() {
             });
     
             if (!response.ok) {
-                const errorBody = await response.text();
+                consconst speat errorBody = await response.text();
                 throw new Error(errorBody || `Server Error: ${response.status}`);
             }
     
