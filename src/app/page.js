@@ -185,7 +185,7 @@ export default function InterviewApp() {
             });
     
             if (!response.ok) {
-                consconst speat errorBody = await response.text();
+                const errorBody = await response.text(); // 👈 Make sure this says 'const'
                 throw new Error(errorBody || `Server Error: ${response.status}`);
             }
     
