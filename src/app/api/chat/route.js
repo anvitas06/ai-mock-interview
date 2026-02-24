@@ -9,8 +9,18 @@ const groq = createGroq({
 
 export async function POST(req) {
   try {
-    const { messages, role, level, questionCount } = await req.json();
+    // Inside your POST function in route.js
+const { messages, role, level, questionCount } = await req.json();
 
+let systemPrompt = `You are a professional Technical Interview Coach...`;
+
+// 🛑 FORCE THE STOP
+if (questionCount >= 4) {
+    systemPrompt = `STOP INTERVIEWING. The interview is now OVER. 
+    Do not ask any more questions. Summarize their performance and give a score.
+    Format your response as a professional report.
+    Include "Score: X/10" at the very end.`;
+}
     const cleanMessages = messages.filter(m => m.text && m.text.trim() !== '');
 
     const formattedMessages = cleanMessages.map(m => ({

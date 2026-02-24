@@ -124,10 +124,13 @@ export default function InterviewApp() {
 
     // 👉 TEXT-TO-SPEECH HELPER
     const speakText = (text) => {
-        console.log("👉 Mentor is trying to say:", text);
-
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-
+        
+        // 🔊 EMERGENCY RESET: If the engine is stuck, clear it
+        if (window.speechSynthesis.speaking) {
+            // Optional: window.speechSynthesis.cancel(); 
+        }
+    
         const cleanText = text.replace(/\*/g, '').trim();
         if (!cleanText) return;
 
@@ -234,12 +237,12 @@ export default function InterviewApp() {
                 speakText(sentenceBuffer);
             }
     
-           // 🌟 THE FIX: Catch the score, save it, and automatically show the history view
-           // Logic for the final report
-           if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 3) {
-            saveToHistory(accumulatedText);
-            // 🛑 The setTimeout was deleted so you stay on the screen to read it!
-        }
+           // 🌟 UPDATED LOGIC FOR THE FINAL REPORT
+// We wait until the AI has asked 4 questions.
+if (accumulatedText.includes("/10") || accumulatedText.toLowerCase().includes("score:")) {
+    saveToHistory(accumulatedText);
+    console.log("✅ Report Saved to History");
+}
         } catch (error) {
             if (error.name === 'AbortError') {
                 console.log('[Frontend] Aborted.');
