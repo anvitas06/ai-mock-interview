@@ -213,14 +213,14 @@ export default function InterviewApp() {
                 done = doneReading;
                 if (value) {
                     const chunkValue = decoder.decode(value, { stream: true });
-                    const cleanChunk = chunkValue; 
-            
-                    accumulatedText += cleanChunk;
-                    sentenceBuffer += cleanChunk; 
-            
+                    accumulatedText += chunkValue;
+                    sentenceBuffer += chunkValue;
+                
+                    // Look for punctuation to speak a full sentence
                     const sentenceMatch = sentenceBuffer.match(/([^.?!]+[.?!]+)/);
                     if (sentenceMatch) {
                         const completeSentence = sentenceMatch[1];
+                        console.log("🔊 AI is saying:", completeSentence); // Check your F12 console for this!
                         speakText(completeSentence);
                         sentenceBuffer = sentenceBuffer.substring(sentenceMatch[0].length);
                     }
