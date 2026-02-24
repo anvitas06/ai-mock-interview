@@ -270,9 +270,22 @@ export default function InterviewApp() {
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                            {['React.js', 'Node.js', 'DSA', 'Java'].map((role) => (
-                                <button key={role} onClick={() => startInterview(role)} style={{ padding: '25px', background: '#1e293b', color: '#fff', border: '1px solid #334155', borderRadius: '15px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold' }}>{role}</button>
-                            ))}
+                        {['React.js', 'Node.js', 'DSA', 'Java'].map((role) => (
+    <button 
+        key={role} 
+        onClick={() => {
+            // 🎙️ THE VOICE FIX: This "wakes up" the speakers for the deployed site
+            if (typeof window !== 'undefined') {
+                const wakeUp = new SpeechSynthesisUtterance("");
+                window.speechSynthesis.speak(wakeUp);
+            }
+            startInterview(role);
+        }} 
+        style={{ padding: '25px', background: '#1e293b', color: '#fff', border: '1px solid #334155', borderRadius: '15px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold' }}
+    >
+        {role}
+    </button>
+))}
                         </div>
 
                         <button onClick={() => setView('history')} style={{ marginTop: '40px', background: 'none', border: 'none', color: '#94a3b8', textDecoration: 'underline', cursor: 'pointer' }}>View Session History ({history.length})</button>
