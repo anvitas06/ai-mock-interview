@@ -11,34 +11,20 @@ export async function POST(req) {
   try {
     const { messages, role, level, questionCount } = await req.json();
 
-    // 1. Set the default persona
-    let systemPrompt = `You are a professional Technical Interview Coach for a ${level} level ${role} position. Ask one question at a time. Do not give away the full answer immediately.`;
+    // 1. Initialize the prompt with the default coaching persona
+    let systemPrompt = `You are a professional Technical Interview Coach for a ${level} level ${role} position. Ask one question at a time.`;
 
-    // 2. 🛑 THE SAFETY NET: Check BOTH questionCount AND message length
-    // questionCount 4 means AI has spoken 4 times. messages.length 7 means 4 AI + 3 User messages.
+    // 2. 🛑 THE SAFETY NET: Check if it's time to end the interview
+    // If the count is 4 or message history is 7+, switch to Report mode
     if (questionCount >= 4 || messages.length >= 7) {
-      systemPrompt = `THE INTERVIEW IS OVER. Do NOT ask any more questions. 
-      Instantly generate a highly professional "Interview Prep Report" summarizing the user's strengths and areas for improvement. 
-      You MUST include a final score out of 10 formatted exactly like this: "Score: X/10".`;
+        systemPrompt = `THE INTERVIEW IS OVER. Do NOT ask any more questions. 
+        Instantly generate an "Interview Prep Report" with a "Score: X/10".`;
     }
 
-    const cleanMessages = messages.filter(m => m.text && m.text.trim() !== '');
-    const formattedMessages = cleanMessages.map(m => ({
-      role: m.role === 'ai' ? 'assistant' : m.role,
-      content: m.text,
-    }));
-
-    // Ensure the conversation starts correctly for the AI SDK
-    if (formattedMessages.length > 0 && formattedMessages[0].role === 'assistant') {
-        formattedMessages.unshift({ 
-            role: 'user', 
-            content: `Hello, I am ready to start my ${level} ${role} interview.` 
-        });
-    }
-
+    // 3. Send the CORRECT systemPrompt to the model
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'), 
-      system: systemPrompt,
+      system: systemPrompt, 
       messages: formattedMessages,
     });
 
