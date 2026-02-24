@@ -123,7 +123,7 @@ export default function InterviewApp() {
     };
 
     // 👉 TEXT-TO-SPEECH HELPER
-    const speakText = (text) => {
+    kText = (text) => {
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
         
         // 🔊 EMERGENCY RESET: If the engine is stuck, clear it
@@ -140,7 +140,7 @@ export default function InterviewApp() {
 
         if (!window.__activeUtterances) {
             window.__activeUtterances = [];
-        }
+        }const spea
         window.__activeUtterances.push(utterance);
 
         utterance.onend = () => {
