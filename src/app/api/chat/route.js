@@ -20,11 +20,15 @@ export async function POST(req) {
    }
 
     // 3. Send the CORRECT systemPrompt to the model
-    const result = streamText({
-      model: groq('llama-3.3-70b-versatile'), 
-      system: systemPrompt, 
-      messages: formattedMessages,
-    });
+    // 🔨 THE SLICE: Only send the last 3 messages to keep the "packet" small
+// This stops the "Server Busy" error immediately.
+const limitedHistory = formattedMessages.slice(-3); 
+
+const result = streamText({
+  model: groq('llama-3.3-70b-versatile'), 
+  system: systemPrompt,
+  messages: limitedHistory, // Use the sliced history here
+});
 
     return new Response(result.textStream, {
       headers: {
