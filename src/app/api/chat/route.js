@@ -10,6 +10,11 @@ const groq = createGroq({
 export async function POST(req) {
   try {
     const { messages, role, level, questionCount } = await req.json();
+    if (questionCount >= 4 || messages.length >= 8) {
+      systemPrompt = `STOP NOW. The interview is over. 
+      Generate the "Interview Prep Report" with "Score: X/10". 
+      Do not ask any more questions.`;
+  }
 
     const cleanMessages = messages.filter(m => m.text && m.text.trim() !== '');
 
