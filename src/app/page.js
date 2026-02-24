@@ -123,10 +123,10 @@ export default function InterviewApp() {
     };
 
     // 👉 TEXT-TO-SPEECH HELPER
-    kText = (text) => {
+    // 👉 TEXT-TO-SPEECH HELPER
+    const speakText = (text) => { // 👈 Change 'kText' back to 'const speakText'
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
         
-        // 🔊 EMERGENCY RESET: If the engine is stuck, clear it
         if (window.speechSynthesis.speaking) {
             // Optional: window.speechSynthesis.cancel(); 
         }
@@ -140,7 +140,7 @@ export default function InterviewApp() {
 
         if (!window.__activeUtterances) {
             window.__activeUtterances = [];
-        } // 👈 Make sure there is a space or new line here
+        } 
         
         window.__activeUtterances.push(utterance);
 
