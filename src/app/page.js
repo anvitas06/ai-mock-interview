@@ -16,9 +16,11 @@ export default function InterviewApp() {
     const [isMounted, setIsMounted] = useState(false);
     
     const messagesEndRef = useRef(null);
+    const abortControllerRef = useRef(null); 
+    const recognitionRef = useRef(null); // 👉 ADDED: Pointer for the microphone
+
     const getScoreColor = (scoreStr) => {
         if (!scoreStr) return '#94a3b8';
-        // Extract just the first number found in the string
         const match = scoreStr.match(/\d+/);
         const score = match ? parseInt(match[0]) : NaN;
         
@@ -27,9 +29,6 @@ export default function InterviewApp() {
         if (score >= 5) return '#fbbf24';   
         return '#ef4444';                   
     };
-    
-    // 👉 NEW: The "pointer" that lets us kill the network request if the user interrupts
-    const abortControllerRef = useRef(null); 
 
     // 2. INITIAL LOAD
     useEffect(() => {
@@ -48,8 +47,8 @@ export default function InterviewApp() {
     // 4. LOGIC: START INTERVIEW
     const startInterview = (role) => {
         const unlock = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(unlock);
-    console.log("🔊 Audio Engine Unlocked");
+        window.speechSynthesis.speak(unlock);
+        console.log("🔊 Audio Engine Unlocked");
     
         setSelectedRole(role);
         setView('interview');
@@ -76,73 +75,97 @@ export default function InterviewApp() {
         localStorage.setItem('interview_history', JSON.stringify(updated));
     };
 
-    // 6. LOGIC: VOICE INPUT (Manual click for now)
-    const startListening = () => {
+    // 6. LOGIC: VOICE INPUT (Start/Stop Toggle)
+    const toggleListening = () => {
+        // If we are already listening, stop it
+        if (isListening && recognitionRef.current) {
+            recognitionRef.current.stop();
+            setIsListening(false);
+            return;
+        }
+
+        // Instantly shut the AI up when you click the mic
+        window.speechSynthesis.cancel();
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return alert("Browser not supported. Use Chrome!");
+        if (!SpeechRecognition) {
+            alert("Voice recognition is not supported in this browser. Please use Google Chrome!");
+            return;
+        }
+
         const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        
         recognition.onstart = () => setIsListening(true);
+        
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            // Append spoken text to whatever is already typed
+            setInput(prev => prev ? `${prev} ${transcript}` : transcript);
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Microphone error:", event.error);
+            setIsListening(false);
+            if (event.error === 'not-allowed') {
+                alert("Microphone access is blocked! Please click the lock icon in your URL bar to allow it.");
+            }
+        };
+        
         recognition.onend = () => setIsListening(false);
-        recognition.onresult = (event) => setInput(event.results[0][0].transcript);
+        
         recognition.start();
     };
 
-    // 👉 NEW: TEXT-TO-SPEECH HELPER
-    // This function actually makes the browser speak out loud.
+    // 👉 TEXT-TO-SPEECH HELPER
     const speakText = (text) => {
         console.log("👉 Mentor is trying to say:", text);
 
-        // If the browser doesn't support speech synthesis, bail out early.
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
-        // Clean markdown a bit before speaking.
         const cleanText = text.replace(/\*/g, '').trim();
         if (!cleanText) return;
 
-        // Create a new utterance for this chunk of text.
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 1.05; // Slightly faster to sound strict
-        utterance.pitch = 0.9; // Slightly lower pitch
+        utterance.rate = 1.05; 
+        utterance.pitch = 0.9; 
 
-        // 🔒 GC-SAFETY HACK:
-        // Keep a global array of "active" utterances on window so that
-        // the JS engine cannot garbage-collect them while they are still playing.
         if (!window.__activeUtterances) {
-            // We attach this only once for the lifetime of the page.
             window.__activeUtterances = [];
         }
         window.__activeUtterances.push(utterance);
 
-        // Log what the browser audio engine is doing.
         utterance.onend = () => {
-            console.log('[TTS] onend fired for utterance:', cleanText);
-            // Remove the finished utterance from the global array.
             window.__activeUtterances = window.__activeUtterances.filter(u => u !== utterance);
         };
 
         utterance.onerror = (event) => {
-            console.log('[TTS] onerror fired for utterance:', cleanText, 'error:', event?.error || event);
-            // On error, also remove it from the global array.
             window.__activeUtterances = window.__activeUtterances.filter(u => u !== utterance);
         };
 
-        // Actually enqueue the utterance with the browser's speech engine.
         window.speechSynthesis.speak(utterance);
     };
 
-    // 👉 NEW: INTERRUPT AI HELPER
-    // We will call this later when the microphone detects the user speaking
+    // 👉 INTERRUPT AI HELPER
     const interruptAI = () => {
         if (loading && abortControllerRef.current) {
             console.log('[Frontend] User interrupted! Aborting request...');
             abortControllerRef.current.abort();
-            window.speechSynthesis.cancel(); // Stop the audio playing
+            window.speechSynthesis.cancel(); 
         }
     };
 
     // 7. LOGIC: SEND MESSAGE
-    // 7. LOGIC: SEND MESSAGE
     const handleSend = async (overrideMessage = null) => {
+        // 🛑 MUTE AI: Clears audio queue and kills network stream if AI is talking
+        window.speechSynthesis.cancel(); 
+        if (abortControllerRef.current) abortControllerRef.current.abort(); 
+
         if (loading || isSendCoolingDown || !((overrideMessage ?? input) || '').toString().trim()) return;
 
         setIsSendCoolingDown(true);
@@ -187,10 +210,6 @@ export default function InterviewApp() {
                 done = doneReading;
                 if (value) {
                     const chunkValue = decoder.decode(value, { stream: true });
-                    
-                    // 🌟 THE X-RAY LOGGER: This will print every single word to your console
-                    console.log("🟢 SERVER SENT:", chunkValue);
-            
                     const cleanChunk = chunkValue; 
             
                     accumulatedText += cleanChunk;
@@ -215,10 +234,12 @@ export default function InterviewApp() {
                 speakText(sentenceBuffer);
             }
     
-            // Logic for the 4-question report
-            if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 3) {
-                saveToHistory(accumulatedText);
-            }
+           // 🌟 THE FIX: Catch the score, save it, and automatically show the history view
+           // Logic for the final report
+           if (accumulatedText.toLowerCase().includes("score") || aiMessageCount >= 3) {
+            saveToHistory(accumulatedText);
+            // 🛑 The setTimeout was deleted so you stay on the screen to read it!
+        }
         } catch (error) {
             if (error.name === 'AbortError') {
                 console.log('[Frontend] Aborted.');
@@ -229,6 +250,7 @@ export default function InterviewApp() {
             setLoading(false);
         }
     };
+
     if (!isMounted) return null;
 
     return (
@@ -278,22 +300,28 @@ export default function InterviewApp() {
 
                         {/* Chat Box */}
                         <div style={{ height: '480px', overflowY: 'auto', background: '#1e293b', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid #334155' }}>
-                        {messages.map((m, i) => (
-    <div key={i} style={{ 
-        alignSelf: m.role === 'ai' ? 'flex-start' : 'flex-end', 
-        
-        /* --- ADD THIS LINE BELOW --- */
-        borderLeft: m.text.includes('/10') ? `4px solid ${getScoreColor(m.text)}` : 'none',
-        
-        background: m.role === 'ai' ? '#334155' : '#0ea5e9', 
-        padding: '15px', 
-        borderRadius: '15px', 
-        maxWidth: '85%', 
-        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' 
-    }}>
-        <ReactMarkdown>{m.text}</ReactMarkdown>
-    </div>
-))}
+                        {messages.map((m, i) => {
+                            // 🌟 THE VISUAL UPGRADE: Detect if this message is the final report
+                            const isReport = m.role === 'ai' && (m.text.includes('/10') || m.text.includes('Score:'));
+                            
+                            return (
+                                <div key={i} style={{ 
+                                    alignSelf: isReport ? 'center' : (m.role === 'ai' ? 'flex-start' : 'flex-end'), 
+                                    background: isReport ? 'linear-gradient(145deg, #0f172a, #1e293b)' : (m.role === 'ai' ? '#334155' : '#0ea5e9'), 
+                                    border: isReport ? '2px solid #38bdf8' : 'none',
+                                    padding: isReport ? '30px' : '15px', 
+                                    borderRadius: isReport ? '20px' : '15px', 
+                                    width: isReport ? '100%' : 'fit-content',
+                                    maxWidth: isReport ? '100%' : '85%', 
+                                    boxShadow: isReport ? '0 10px 25px -5px rgba(56, 189, 248, 0.15)' : '0 4px 6px -1px rgba(0,0,0,0.1)',
+                                    fontSize: isReport ? '1.1rem' : '1rem',
+                                    lineHeight: '1.6',
+                                    color: isReport ? '#f8fafc' : '#fff'
+                                }}>
+                                    <ReactMarkdown>{m.text}</ReactMarkdown>
+                                </div>
+                            );
+                        })}
                             {loading && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Mentor is thinking...</div>}
                             <div ref={messagesEndRef} />
                         </div>
@@ -302,7 +330,8 @@ export default function InterviewApp() {
                         <div style={{ display: 'flex', gap: '12px', marginTop: '20px', background: '#1e293b', padding: '12px', borderRadius: '50px', border: '1px solid #334155', alignItems: 'center' }}>
                             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', padding: '10px 15px', outline: 'none', fontSize: '1rem' }} placeholder="Type your answer or use the mic..." />
                             
-                            <button onClick={startListening} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.5rem', filter: isListening ? 'drop-shadow(0 0 8px #ef4444)' : 'none' }}>
+                            {/* 👉 UPDATED: Now uses toggleListening */}
+                            <button onClick={toggleListening} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.5rem', filter: isListening ? 'drop-shadow(0 0 8px #ef4444)' : 'none' }}>
                                 {isListening ? '🛑' : '🎙️'}
                             </button>
 
@@ -343,24 +372,22 @@ export default function InterviewApp() {
                                             <span style={{ color: '#64748b', fontSize: '0.9rem' }}>{item.date}</span>
                                         </div>
                                         <div style={{ 
-    marginTop: '10px', 
-    color: getScoreColor(item.score), // 👈 Dynamic color!
-    fontWeight: 'bold', 
-    fontSize: '1.2rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-}}>
-    {/* Adding a small dot indicator for extra professional look */}
-    <span style={{ 
-        height: '10px', 
-        width: '10px', 
-        borderRadius: '50%', 
-        background: getScoreColor(item.score) 
-    }}></span>
-    {item.score}
-</div>
-                                        
+                                            marginTop: '10px', 
+                                            color: getScoreColor(item.score),
+                                            fontWeight: 'bold', 
+                                            fontSize: '1.2rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}>
+                                            <span style={{ 
+                                                height: '10px', 
+                                                width: '10px', 
+                                                borderRadius: '50%', 
+                                                background: getScoreColor(item.score) 
+                                            }}></span>
+                                            {item.score}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
