@@ -10,19 +10,25 @@ const groq = createGroq({
 export async function POST(req) {
   try {
     const { messages, role, level, questionCount } = await req.json();
-    if ( messages.length >= 7) {
-      systemPrompt = `STOP NOW. The interview is over. 
-      Generate the "Interview Prep Report" with "Score: X/10". 
-      Do not ask any more questions.`;
-  }
+
+    // 1. Set the default persona
+    let systemPrompt = `You are a professional Technical Interview Coach for a ${level} level ${role} position. Ask one question at a time. Do not give away the full answer immediately.`;
+
+    // 2. 🛑 THE SAFETY NET: Check BOTH questionCount AND message length
+    // questionCount 4 means AI has spoken 4 times. messages.length 7 means 4 AI + 3 User messages.
+    if (questionCount >= 4 || messages.length >= 7) {
+      systemPrompt = `THE INTERVIEW IS OVER. Do NOT ask any more questions. 
+      Instantly generate a highly professional "Interview Prep Report" summarizing the user's strengths and areas for improvement. 
+      You MUST include a final score out of 10 formatted exactly like this: "Score: X/10".`;
+    }
 
     const cleanMessages = messages.filter(m => m.text && m.text.trim() !== '');
-
     const formattedMessages = cleanMessages.map(m => ({
       role: m.role === 'ai' ? 'assistant' : m.role,
       content: m.text,
     }));
 
+    // Ensure the conversation starts correctly for the AI SDK
     if (formattedMessages.length > 0 && formattedMessages[0].role === 'assistant') {
         formattedMessages.unshift({ 
             role: 'user', 
@@ -30,17 +36,6 @@ export async function POST(req) {
         });
     }
 
-    // 🌟 FIXED: Only one "let" declaration for systemPrompt
-    let systemPrompt = `You are a professional Technical Interview Coach for a ${level} level ${role} position. 
-Your goal is to help the student improve for their upcoming interview. Ask one question at a time. Do not give away the full answer immediately.`;
-    
-    // We update the existing variable instead of creating a new one
-    if (questionCount >= 4) {
-        systemPrompt = `The interview is now OVER. Do NOT ask any more questions. 
-Instead, instantly generate a highly professional "Interview Prep Report" summarizing the user's strengths and areas for improvement. 
-You MUST include a final score out of 10 formatted exactly like this: "Score: X/10".`;
-    }
-    
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'), 
       system: systemPrompt,
@@ -51,15 +46,11 @@ You MUST include a final score out of 10 formatted exactly like this: "Score: X/
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
       }
     });
 
   } catch (error) {
     console.error('[Backend Error]:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }), 
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
