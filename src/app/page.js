@@ -140,7 +140,8 @@ export default function InterviewApp() {
 
         if (!window.__activeUtterances) {
             window.__activeUtterances = [];
-        }const spea
+        } // 👈 Make sure there is a space or new line here
+        
         window.__activeUtterances.push(utterance);
 
         utterance.onend = () => {
