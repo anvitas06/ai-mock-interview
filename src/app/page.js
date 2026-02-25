@@ -40,6 +40,15 @@ export default function InterviewApp() {
         }
     }, [messages, view]);
 
+    // This ensures voices are ready as soon as the page loads
+useEffect(() => {
+    const loadVoices = () => {
+        window.speechSynthesis.getVoices();
+    };
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+}, []);
+
     const startInterview = (role) => {
         const unlock = new SpeechSynthesisUtterance("");
         window.speechSynthesis.speak(unlock);
@@ -140,25 +149,25 @@ export default function InterviewApp() {
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
-                if (value) {
-                    const chunkValue = decoder.decode(value, { stream: true });
-                    accumulatedText += chunkValue;
-                    sentenceBuffer += chunkValue;
-                
-                    const sentenceMatch = sentenceBuffer.match(/([^.?!]+[.?!]+)/);
-                    if (sentenceMatch) {
-                        const completeSentence = sentenceMatch[1];
-                        console.log("🔊 AI is saying:", completeSentence); 
-                        speakText(completeSentence); 
-                        sentenceBuffer = sentenceBuffer.substring(sentenceMatch[0].length);
-                    }
-            
-                    setMessages(prev => {
-                        const updatedMessages = [...prev];
-                        updatedMessages[updatedMessages.length - 1].text = accumulatedText;
-                        return updatedMessages;
-                    });
-                }
+               // REPLACE your punctuation logic with this "Force Trigger" logic
+if (value) {
+    const chunkValue = decoder.decode(value, { stream: true });
+    accumulatedText += chunkValue;
+    sentenceBuffer += chunkValue;
+
+    // Speak every time the buffer gets long, OR if we find punctuation
+    if (sentenceBuffer.length > 40 || /[.?!]/.test(sentenceBuffer)) {
+        console.log("⚡ FORCE TRIGGER SPEAKING:", sentenceBuffer); 
+        speakText(sentenceBuffer);
+        sentenceBuffer = ""; // Clear buffer after speaking
+    }
+
+    setMessages(prev => {
+        const updatedMessages = [...prev];
+        updatedMessages[updatedMessages.length - 1].text = accumulatedText;
+        return updatedMessages;
+    });
+}
             }
             if (sentenceBuffer.trim()) speakText(sentenceBuffer);
             if (accumulatedText.includes("Score:")) saveToHistory(accumulatedText);
