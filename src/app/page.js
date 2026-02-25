@@ -22,7 +22,6 @@ export default function InterviewApp() {
         if (!scoreStr) return '#94a3b8';
         const match = scoreStr.match(/\d+/);
         const score = match ? parseInt(match[0]) : NaN;
-        if (isNaN(score)) return '#94a3b8'; 
         if (score >= 8) return '#10b981';   
         if (score >= 5) return '#fbbf24';   
         return '#ef4444';                   
@@ -32,6 +31,8 @@ export default function InterviewApp() {
         setIsMounted(true);
         const saved = JSON.parse(localStorage.getItem('interview_history') || '[]');
         setHistory(saved);
+        // Pre-load voices
+        window.speechSynthesis.getVoices();
     }, []);
 
     useEffect(() => {
@@ -39,61 +40,6 @@ export default function InterviewApp() {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }
     }, [messages, view]);
-
-    // This ensures voices are ready as soon as the page loads
-useEffect(() => {
-    const loadVoices = () => {
-        window.speechSynthesis.getVoices();
-    };
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices();
-}, []);
-
-    const startInterview = (role) => {
-        const unlock = new SpeechSynthesisUtterance("");
-        window.speechSynthesis.speak(unlock);
-        setSelectedRole(role);
-        setView('interview');
-        setMessages([{ role: 'ai', text: `Hello. I am your **${level}** level Mentor for **${role}**. Question 1: Can you introduce yourself and tell me about your experience with ${role}?` }]);
-    };
-
-    const saveToHistory = (finalText, manualScore = null) => {
-        const scoreMatch = finalText.match(/(\d+\/\d+)/) || finalText.match(/(\d+)\s*\/\s*10/);
-        const detectedScore = scoreMatch ? `Score: ${scoreMatch[0]}` : (manualScore || "Completed");
-        const newRecord = {
-            id: Date.now(),
-            role: selectedRole,
-            level: level,
-            score: detectedScore,
-            date: new Date().toLocaleDateString(),
-            transcript: messages, 
-            feedback: finalText
-        };
-        const updated = [newRecord, ...history];
-        setHistory(updated);
-        localStorage.setItem('interview_history', JSON.stringify(updated));
-    };
-
-    const toggleListening = () => {
-        if (isListening && recognitionRef.current) {
-            recognitionRef.current.stop();
-            setIsListening(false);
-            return;
-        }
-        window.speechSynthesis.cancel();
-        if (abortControllerRef.current) abortControllerRef.current.abort();
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return alert("Please use Chrome!");
-        const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-        recognition.onstart = () => setIsListening(true);
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            setInput(prev => prev ? `${prev} ${transcript}` : transcript);
-        };
-        recognition.onend = () => setIsListening(false);
-        recognition.start();
-    };
 
     const speakText = (text) => {
         if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -106,6 +52,14 @@ useEffect(() => {
         utterance.voice = voices.find(v => v.lang.includes('en-US')) || voices[0];
         window.speechSynthesis.speak(utterance);
         console.log("🔊 Actually speaking now:", cleanText);
+    };
+
+    const startInterview = (role) => {
+        const unlock = new SpeechSynthesisUtterance("");
+        window.speechSynthesis.speak(unlock);
+        setSelectedRole(role);
+        setView('interview');
+        setMessages([{ role: 'ai', text: `Hello. I am your **${level}** level Mentor for **${role}**. Question 1: Can you introduce yourself and tell me about your experience?` }]);
     };
 
     const handleSend = async (overrideMessage = null) => {
@@ -122,7 +76,7 @@ useEffect(() => {
         const aiMessageCount = messages.filter(m => m.role === 'ai').length;
         setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
         setInput("");
-    
+
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
@@ -135,43 +89,45 @@ useEffect(() => {
                     questionCount: aiMessageCount,
                 }),
             });
-    
-            if (!response.ok) throw new Error("Server error");
-    
+        
+            console.log("📡 Status:", response.status);
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let done = false;
             let accumulatedText = "";
             let sentenceBuffer = ""; 
-    
+
             setMessages(prev => [...prev, { role: 'ai', text: "" }]);
-    
+
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
-               // REPLACE your punctuation logic with this "Force Trigger" logic
-if (value) {
-    const chunkValue = decoder.decode(value, { stream: true });
-    accumulatedText += chunkValue;
-    sentenceBuffer += chunkValue;
+                if (value) {
+                    const chunkValue = decoder.decode(value, { stream: true });
+                    accumulatedText += chunkValue;
+                    sentenceBuffer += chunkValue;
 
-    // Speak every time the buffer gets long, OR if we find punctuation
-    if (sentenceBuffer.length > 40 || /[.?!]/.test(sentenceBuffer)) {
-        console.log("⚡ FORCE TRIGGER SPEAKING:", sentenceBuffer); 
-        speakText(sentenceBuffer);
-        sentenceBuffer = ""; // Clear buffer after speaking
-    }
+                    if (/[.?!]/.test(sentenceBuffer) || sentenceBuffer.length > 50) {
+                        console.log("🔊 AI is saying:", sentenceBuffer); 
+                        speakText(sentenceBuffer);
+                        sentenceBuffer = ""; 
+                    }
 
-    setMessages(prev => {
-        const updatedMessages = [...prev];
-        updatedMessages[updatedMessages.length - 1].text = accumulatedText;
-        return updatedMessages;
-    });
-}
+                    setMessages(prev => {
+                        const updatedMessages = [...prev];
+                        updatedMessages[updatedMessages.length - 1].text = accumulatedText;
+                        return updatedMessages;
+                    });
+                }
             }
             if (sentenceBuffer.trim()) speakText(sentenceBuffer);
-            if (accumulatedText.includes("Score:")) saveToHistory(accumulatedText);
-
+            if (accumulatedText.includes("Score:")) {
+                const newRecord = { id: Date.now(), role: selectedRole, level, score: accumulatedText.match(/Score: \d+\/\d+/)?.[0] || "Completed", date: new Date().toLocaleDateString(), feedback: accumulatedText };
+                const updated = [newRecord, ...history];
+                setHistory(updated);
+                localStorage.setItem('interview_history', JSON.stringify(updated));
+            }
         } catch (error) {
             if (error.name !== 'AbortError') setMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}` }]);
         } finally {
@@ -186,27 +142,24 @@ if (value) {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' && (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8', margin: '0' }}>Strict Mentor</h1>
-                        <p style={{ color: '#94a3b8', marginBottom: '40px' }}>AI-powered technical interviews.</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor</h1>
                         <div style={{ marginBottom: '30px' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
-                                <button key={l} onClick={() => setLevel(l)} style={{ margin: '0 5px', padding: '12px 25px', borderRadius: '25px', border: '1px solid #38bdf8', background: level === l ? '#38bdf8' : 'transparent', color: level === l ? '#0f172a' : '#38bdf8', cursor: 'pointer', fontWeight: 'bold' }}>{l}</button>
+                                <button key={l} onClick={() => setLevel(l)} style={{ margin: '0 5px', padding: '12px 25px', borderRadius: '25px', border: '1px solid #38bdf8', background: level === l ? '#38bdf8' : 'transparent', color: level === l ? '#0f172a' : '#38bdf8', cursor: 'pointer' }}>{l}</button>
                              ))}
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                             {['React.js', 'Node.js', 'DSA', 'Java'].map((role) => (
-                                <button key={role} onClick={() => startInterview(role)} style={{ padding: '25px', background: '#1e293b', color: '#fff', border: '1px solid #334155', borderRadius: '15px', cursor: 'pointer', fontWeight: 'bold' }}>{role}</button>
+                                <button key={role} onClick={() => startInterview(role)} style={{ padding: '25px', background: '#1e293b', color: '#fff', border: '1px solid #334155', borderRadius: '15px', cursor: 'pointer' }}>{role}</button>
                             ))}
                         </div>
-                        <button onClick={() => setView('history')} style={{ marginTop: '40px', background: 'none', border: 'none', color: '#94a3b8', textDecoration: 'underline', cursor: 'pointer' }}>History ({history.length})</button>
                     </div>
                 )}
-
                 {view === 'interview' && (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                             <h2>{selectedRole} ({level})</h2>
-                            <button onClick={() => setView('landing')} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer' }}>Quit</button>
+                            <button onClick={() => setView('landing')} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px' }}>Quit</button>
                         </div>
                         <div style={{ height: '480px', overflowY: 'auto', background: '#1e293b', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             {messages.map((m, i) => (
@@ -218,9 +171,8 @@ if (value) {
                             <div ref={messagesEndRef} />
                         </div>
                         <div style={{ display: 'flex', gap: '12px', marginTop: '20px', background: '#1e293b', padding: '12px', borderRadius: '50px' }}>
-                            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', padding: '10px', outline: 'none' }} placeholder="Type your answer..." />
-                            <button onClick={toggleListening} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.5rem' }}>{isListening ? '🛑' : '🎙️'}</button>
-                            <button onClick={() => handleSend()} disabled={loading} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '25px', padding: '12px 30px', cursor: 'pointer' }}>SEND</button>
+                            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', outline: 'none' }} placeholder="Type your answer..." />
+                            <button onClick={() => handleSend()} disabled={loading} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '25px', padding: '12px 30px' }}>SEND</button>
                         </div>
                     </>
                 )}
