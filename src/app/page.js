@@ -124,6 +124,7 @@ export default function InterviewApp() {
 
     // 👉 TEXT-TO-SPEECH HELPER
     const speakText = (text) => {
+        console.log("DEBUG: speakText function reached with text:", text);
         if (typeof window === 'undefined' || !window.speechSynthesis) return;
         
         // Cancel any current speaking to prevent overlapping/stuck audio
