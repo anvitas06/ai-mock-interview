@@ -47,6 +47,9 @@ export default function InterviewApp() {
         setMessages(prev => [...prev, { role: 'user', text: userText }]);
         setInput("");
         abortControllerRef.current = new AbortController();
+        // Inside handleSend
+setIsSendCoolingDown(true);
+setTimeout(() => setIsSendCoolingDown(false), 5000); // Changed from 2000 to 5000
 
         try {
             console.log("📡 Fetching from API..."); // STEP 2

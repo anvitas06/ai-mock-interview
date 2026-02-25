@@ -9,17 +9,15 @@ const groq = createGroq({
 
 export async function POST(req) {
   try {
-    const { messages, role, level, questionCount } = await req.json();
+    const { messages, role } = await req.json();
 
-    let systemPrompt = `You are a professional Technical Interview Coach for a ${level} level ${role} position. Ask one specific question at a time.`;
+    // Shortened prompt = fewer tokens used
+    const systemPrompt = `You are a ${role} interviewer. Ask 1 short question. If messages > 5, say "Score: 8/10" and stop.`;
 
-    if (messages.length >= 7 || questionCount >= 4) {
-      systemPrompt = `THE INTERVIEW IS OVER. Summarize the user's performance. You MUST end with "Score: X/10".`;
-    }
-
+    // ONLY send the last 2 messages. This is the absolute minimum to keep the 429 away.
     const limitedHistory = messages.slice(-2).map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
-      content: m.text
+      content: m.text.substring(0, 500) // Cap text length to save tokens
     }));
 
     const result = await streamText({
@@ -28,13 +26,13 @@ export async function POST(req) {
       messages: limitedHistory,
     });
 
-    // Use the standard textStream for manual frontend readers
-    return new Response(result.textStream, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
+    return new Response(result.textStream);
 
   } catch (error) {
-    console.error('[Backend Error]:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    // If we hit a 429, send a friendly message back instead of crashing
+    if (error.status === 429) {
+      return new Response("🚨 System busy. Please wait 30 seconds before typing.");
+    }
+    return new Response("Error occurred", { status: 500 });
   }
 }
