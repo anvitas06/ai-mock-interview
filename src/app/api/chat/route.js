@@ -11,28 +11,25 @@ export async function POST(req) {
   try {
     const { messages, role } = await req.json();
 
-    // Shortened prompt = fewer tokens used
-    const systemPrompt = `You are a ${role} interviewer. Ask 1 short question. If messages > 5, say "Score: 8/10" and stop.`;
+    // ULTRA-SHORT PROMPT: Every character counts toward your 429 limit
+    const systemPrompt = `Interviewer for ${role}. Ask 1 short question. End with "Score: 8/10" after 3 turns.`;
 
-    // ONLY send the last 2 messages. This is the absolute minimum to keep the 429 away.
-    const limitedHistory = messages.slice(-2).map(m => ({
+    // THE 1-MESSAGE RULE: Only send the last message. 
+    // This makes the request tiny so it never hits the 429 limit.
+    const lastMessage = messages.slice(-1).map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
-      content: m.text.substring(0, 500) // Cap text length to save tokens
+      content: m.text
     }));
 
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: systemPrompt,
-      messages: limitedHistory,
+      messages: lastMessage, 
     });
 
     return new Response(result.textStream);
 
   } catch (error) {
-    // If we hit a 429, send a friendly message back instead of crashing
-    if (error.status === 429) {
-      return new Response("🚨 System busy. Please wait 30 seconds before typing.");
-    }
-    return new Response("Error occurred", { status: 500 });
+    return new Response("Server Busy", { status: 429 });
   }
 }
