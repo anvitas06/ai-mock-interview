@@ -21,7 +21,7 @@ export async function POST(req) {
     }
 
     // 3. THE SLICE (Bypass 429 Errors)
-    const limitedHistory = messages.slice(-3).map(m => ({
+    const limitedHistory = messages.slice(-2).map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
       content: m.text
     }));
