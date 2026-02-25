@@ -9,33 +9,30 @@ const groq = createGroq({
 
 export async function POST(req) {
   try {
-    const { messages, questionCount } = await req.json()
-    // 1. Initialize the prompt with the default coaching persona
+    const { messages, role, level, questionCount } = await req.json();
+
+    // 1. Initialize Persona
     let systemPrompt = `You are a professional Technical Interview Coach for a ${level} level ${role} position. Ask one question at a time.`;
 
-    // 2. 🛑 THE SAFETY NET: Check if it's time to end the interview
-    // If the count is 4 or message history is 7+, switch to Report mode
-    if (messages.length >= 6 || questionCount >= 4) {
-      // RETURN THE REPORT IMMEDIATELY
-   }
+    // 2. 🛑 THE SAFETY NET
+    if (messages.length >= 7 || questionCount >= 4) {
+      systemPrompt = `THE INTERVIEW IS OVER. Provide a final summary of the user's performance. 
+      You MUST end your response with a clear score in this format: "Score: X/10".`;
+    }
 
-    // 3. Send the CORRECT systemPrompt to the model
-    // 🔨 THE SLICE: Only send the last 3 messages to keep the "packet" small
-// This stops the "Server Busy" error immediately.
-const limitedHistory = formattedMessages.slice(-3); 
+    // 3. THE SLICE (Bypass 429 Errors)
+    const limitedHistory = messages.slice(-3).map(m => ({
+      role: m.role === 'ai' ? 'assistant' : 'user',
+      content: m.text
+    }));
 
-const result = streamText({
-  model: groq('llama-3.3-70b-versatile'), 
-  system: systemPrompt,
-  messages: limitedHistory, // Use the sliced history here
-});
-
-    return new Response(result.textStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache',
-      }
+    const result = streamText({
+      model: groq('llama-3.3-70b-versatile'),
+      system: systemPrompt,
+      messages: limitedHistory,
     });
+
+    return result.toDataStreamResponse();
 
   } catch (error) {
     console.error('[Backend Error]:', error);
