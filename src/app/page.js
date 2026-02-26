@@ -9,13 +9,15 @@ export default function InterviewApp() {
     const [selectedRole, setSelectedRole] = useState(null);
     const [level, setLevel] = useState('Junior');
     const [isListening, setIsListening] = useState(false);
+    
+    // 🚨 OUR CUSTOM, CRASH-PROOF INPUT STATE
+    const [textInput, setTextInput] = useState(""); 
+    
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
 
-    // Safe Mounting
     useEffect(() => { setIsMounted(true); }, []);
 
-    // TTS: Voice Output
     const stopVoice = () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
@@ -34,8 +36,8 @@ export default function InterviewApp() {
         window.speechSynthesis.speak(utterance);
     };
 
-    // AI SDK Connection (Clean, no timers)
-    const { messages, input, setInput, handleInputChange, handleSubmit, setMessages, isLoading } = useChat({
+    // 🚨 WE ONLY USE "messages" AND "append" FROM VERCEL NOW
+    const { messages, append, setMessages, isLoading } = useChat({
         api: '/api/chat',
         body: { role: selectedRole, level: level },
         onFinish: (message) => {
@@ -43,7 +45,6 @@ export default function InterviewApp() {
         }
     });
 
-    // STT: Voice Input (Microphone)
     const startListening = () => {
         if (isListening) {
             recognitionRef.current?.stop();
@@ -51,11 +52,11 @@ export default function InterviewApp() {
         }
 
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert("Your browser does not support speech recognition. Please use the text box.");
+            alert("Your browser does not support speech recognition.");
             return;
         }
 
-        stopVoice(); // Stop AI so it doesn't listen to itself
+        stopVoice(); 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
@@ -68,14 +69,13 @@ export default function InterviewApp() {
         
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            // Add spoken text to whatever is already in the input box
-            setInput(input ? input + " " + transcript : transcript);
+            // 🚨 Safely update our custom state with the voice text
+            setTextInput(prev => prev ? prev + " " + transcript : transcript);
         };
 
         recognition.start();
     };
 
-    // Auto-scroll to newest message
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
@@ -85,20 +85,23 @@ export default function InterviewApp() {
         setSelectedRole(role);
         setView('interview');
         setMessages([]);
+        setTextInput(""); // Clear box
         
         const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
         setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
         setTimeout(() => speakText(firstMsg), 500);
     };
 
-    // Simple Submit Handler
+    // 🚨 CUSTOM SUBMIT HANDLER
     const handleFinalSubmit = (e) => {
-        e.preventDefault(); // Stop page refresh
+        e.preventDefault();
         stopVoice();
         if (isListening) recognitionRef.current?.stop();
-        if (!input?.trim() || isLoading) return;
+        if (!textInput.trim() || isLoading) return;
         
-        handleSubmit(e); // Send to AI
+        // Force the message to the AI manually
+        append({ role: 'user', content: textInput });
+        setTextInput(""); // Empty the box instantly after sending
     };
 
     if (!isMounted) return null;
@@ -117,8 +120,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 2.1</h1>
-                        <p style={{ color: '#94a3b8' }}>Unrestricted Voice & Text Mode</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.0</h1>
+                        <p style={{ color: '#94a3b8' }}>Custom State Override</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -158,15 +161,16 @@ export default function InterviewApp() {
                             </div>
                         </div>
 
+                        {/* 🚨 SAFELY CONTROLLED INPUT FORM */}
                         <form onSubmit={handleFinalSubmit} style={{ display: 'flex', gap: '10px', background: '#1e293b', padding: '10px', borderRadius: '50px', marginBottom: '20px' }}>
                             <input 
-                                value={input} 
-                                onChange={handleInputChange} 
+                                value={textInput} 
+                                onChange={(e) => setTextInput(e.target.value)} 
                                 disabled={isLoading} 
                                 placeholder="Type your answer here..." 
                                 style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none', fontSize: '16px' }} 
                             />
-                            <button type="submit" disabled={isLoading || !input?.trim()} style={{ background: isLoading ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: isLoading ? 'not-allowed' : 'pointer' }}>
+                            <button type="submit" disabled={isLoading || !textInput.trim()} style={{ background: (isLoading || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: (isLoading || !textInput.trim()) ? 'not-allowed' : 'pointer' }}>
                                 SEND
                             </button>
                         </form>
