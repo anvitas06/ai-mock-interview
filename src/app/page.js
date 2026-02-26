@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { useChat } from '@ai-sdk/react'; 
 import ReactMarkdown from 'react-markdown';
 
 export default function InterviewApp() {
@@ -11,6 +10,10 @@ export default function InterviewApp() {
     const [isListening, setIsListening] = useState(false);
     const [textInput, setTextInput] = useState(""); 
     
+    // 🚨 OUR OWN RAW STATE (Bypassing Vercel's hook)
+    const [messages, setMessages] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
 
@@ -33,22 +36,6 @@ export default function InterviewApp() {
         utterance.voice = voices.find(v => v.lang.includes('en-US')) || voices[0];
         window.speechSynthesis.speak(utterance);
     };
-
-    const chat = useChat({
-        api: '/api/chat',
-        body: { role: selectedRole, level: level },
-        onFinish: (message) => {
-            if (message?.content) speakText(message.content);
-        },
-        onError: (err) => {
-            console.error("🚨 BACKEND CRASH:", err);
-            alert("SERVER ERROR: " + err.message);
-        }
-    });
-
-    const { messages, setMessages, status } = chat || {};
-    // Lock button if AI is actively typing
-    const isBusy = status === 'in_progress';
 
     const startListening = () => {
         if (isListening) {
@@ -88,37 +75,69 @@ export default function InterviewApp() {
         stopVoice();
         setSelectedRole(role);
         setView('interview');
-        if (setMessages) setMessages([]);
         setTextInput(""); 
         
         const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
-        if (setMessages) setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
+        setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
         setTimeout(() => speakText(firstMsg), 500);
     };
 
-    // 🚨 THE UNBREAKABLE SUBMIT BUTTON
-    const handleFinalSubmit = (e) => {
+    // 🚨 RAW JAVASCRIPT FETCH (Unbreakable by package updates)
+    const handleFinalSubmit = async (e) => {
         e.preventDefault();
         stopVoice();
         if (isListening) recognitionRef.current?.stop();
-        if (!textInput.trim() || isBusy) return;
+        if (!textInput.trim() || isLoading) return;
         
+        const userText = textInput;
+        setTextInput(""); 
+        setIsLoading(true);
+
+        // 1. Add user message to UI immediately
+        const updatedMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
+        setMessages(updatedMessages);
+
         try {
-            // We know 'sendMessage' is exactly what Vercel provided based on your error log
-            if (chat && typeof chat.sendMessage === 'function') {
-                // Try sending it as a message object first
-                try {
-                    chat.sendMessage({ role: 'user', content: textInput });
-                } catch (err) {
-                    // Fallback to sending it as a raw string
-                    chat.sendMessage(textInput);
-                }
-                setTextInput(""); 
-            } else {
-                alert("CRASH: Vercel failed to load the sendMessage tool.");
+            // 2. Talk to backend directly
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: updatedMessages, role: selectedRole, level: level }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Server responded with an error.");
             }
+
+            // 3. Manually read the stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let aiResponseText = "";
+            const assistantMessageId = (Date.now() + 1).toString();
+
+            // Add an empty AI message to the screen to start filling
+            setMessages(prev => [...prev, { id: assistantMessageId, role: 'assistant', content: "" }]);
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                aiResponseText += decoder.decode(value, { stream: true });
+                
+                // Update the UI as text flows in
+                setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessageId ? { ...msg, content: aiResponseText } : msg
+                ));
+            }
+
+            // Speak only when finished
+            speakText(aiResponseText);
+
         } catch (error) {
-            alert("CRASH REASON: " + error.message);
+            alert("NETWORK ERROR: " + error.message);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -126,20 +145,11 @@ export default function InterviewApp() {
 
     return (
         <div style={{ padding: '20px', background: '#0f172a', color: '#fff', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-            <style>{`
-                @keyframes pulse {
-                    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-                    70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
-                    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-                }
-                .mic-active { animation: pulse 1.5s infinite; background: #ef4444 !important; }
-            `}</style>
-
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 4.0</h1>
-                        <p style={{ color: '#94a3b8' }}>Direct SendMessage API</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 5.0</h1>
+                        <p style={{ color: '#94a3b8' }}>Pure Vanilla React Override</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -168,8 +178,7 @@ export default function InterviewApp() {
                                 <button 
                                     type="button"
                                     onClick={startListening}
-                                    className={isListening ? 'mic-active' : ''}
-                                    style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#38bdf8', border: 'none', cursor: 'pointer', fontSize: '30px', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    style={{ width: '80px', height: '80px', borderRadius: '50%', background: isListening ? '#ef4444' : '#38bdf8', border: 'none', cursor: 'pointer', fontSize: '30px', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                 >
                                     {isListening ? '🛑' : '🎤'}
                                 </button>
@@ -183,11 +192,11 @@ export default function InterviewApp() {
                             <input 
                                 value={textInput} 
                                 onChange={(e) => setTextInput(e.target.value)} 
-                                disabled={isBusy} 
+                                disabled={isLoading} 
                                 placeholder="Type your answer here..." 
                                 style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none', fontSize: '16px' }} 
                             />
-                            <button type="submit" disabled={isBusy || !textInput.trim()} style={{ background: (isBusy || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: (isBusy || !textInput.trim()) ? 'not-allowed' : 'pointer' }}>
+                            <button type="submit" disabled={isLoading || !textInput.trim()} style={{ background: (isLoading || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: (isLoading || !textInput.trim()) ? 'not-allowed' : 'pointer' }}>
                                 SEND
                             </button>
                         </form>
@@ -212,7 +221,7 @@ export default function InterviewApp() {
                                     </div>
                                 );
                             })}
-                            {isBusy && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
+                            {isLoading && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
                             <div ref={messagesEndRef} />
                         </div>
                     </div>
