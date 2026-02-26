@@ -96,28 +96,22 @@ export default function InterviewApp() {
 
     const handleFinalSubmit = (e) => {
         e.preventDefault();
-        console.log("🚀 SEND BUTTON CLICKED. Attempting to send:", textInput);
-        
         stopVoice();
         if (isListening) recognitionRef.current?.stop();
-        
-        if (!textInput.trim()) {
-            console.log("⚠️ Blocked: Text input is empty.");
-            return;
-        }
-        if (isLoading) {
-            console.log("⚠️ Blocked: AI is still loading previous response.");
-            return;
-        }
+        if (!textInput.trim() || isLoading) return;
         
         try {
-            // Added explicit ID to prevent SDK confusion
-            append({ id: Date.now().toString(), role: 'user', content: textInput });
-            console.log("✅ Message passed to AI SDK successfully.");
+            // 🚨 SAFETY CHECK: Is Vercel actually giving us the append function?
+            if (typeof append !== 'function') {
+                alert("CRASH REASON: Vercel's 'append' function is missing! The SDK update did not work.");
+                return;
+            }
+            
+            append({ role: 'user', content: textInput });
             setTextInput(""); 
         } catch (error) {
-            console.error("❌ APPEND FAILED:", error);
-            alert("Frontend crashed trying to send the message.");
+            // 🚨 EXACT ERROR TRAP
+            alert("CRASH REASON: " + error.message);
         }
     };
 
