@@ -137,21 +137,58 @@ export default function InterviewApp() {
                             <div ref={messagesEndRef} />
                         </div>
 
-                        <form onSubmit={onFormSubmit} style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                            <input 
-                                value={input} onChange={handleInputChange} 
-                                disabled={isLoading || cooldown > 0} 
-                                style={{ flex: 1, background: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '15px', borderRadius: '30px', outline: 'none' }} 
-                                placeholder={cooldown > 0 ? `Wait ${Math.floor(cooldown/60)}m...` : "Type answer..."} 
-                            />
-                            <button 
-                                type="submit" 
-                                disabled={isLoading || cooldown > 0} 
-                                style={{ background: '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '30px', padding: '0 30px', fontWeight: 'bold', cursor: 'pointer' }}
-                            >
-                                SEND
-                            </button>
-                        </form>
+                        <form 
+    onSubmit={(e) => {
+        e.preventDefault();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel(); 
+        if (cooldown > 0 || !input.trim() || isLoading) return;
+        
+        console.log("🚀 SENDING TO AI:", input);
+        handleSubmit(e); 
+        setCooldown(300); 
+    }} 
+    style={{ 
+        display: 'flex', 
+        gap: '10px', 
+        marginTop: '20px', 
+        background: '#1e293b', 
+        padding: '10px', 
+        borderRadius: '50px',
+        border: '1px solid #334155'
+    }}
+>
+    <input 
+        id="user-input"
+        name="user-input"
+        value={input} 
+        onChange={handleInputChange} 
+        disabled={isLoading || cooldown > 0} 
+        style={{ 
+            flex: 1, 
+            background: 'transparent', 
+            border: 'none', 
+            color: '#fff', 
+            paddingLeft: '15px', 
+            outline: 'none'
+        }} 
+        placeholder={cooldown > 0 ? `Wait ${Math.floor(cooldown/60)}m...` : "Type answer..."} 
+    />
+    <button 
+        type="submit" 
+        disabled={isLoading || cooldown > 0 || !input.trim()} 
+        style={{ 
+            background: (isLoading || cooldown > 0) ? '#475569' : '#38bdf8', 
+            color: '#0f172a', 
+            border: 'none', 
+            borderRadius: '25px', 
+            padding: '12px 25px', 
+            fontWeight: 'bold',
+            cursor: 'pointer'
+        }}
+    >
+        {isLoading ? "..." : (cooldown > 0 ? "Locked" : "SEND")}
+    </button>
+</form>
                     </>
                 )}
             </div>
