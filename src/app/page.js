@@ -42,8 +42,12 @@ export default function InterviewApp() {
             role: selectedRole,
             level: level,
         },
+        onError: (err) => {
+            // 🚨 THIS WILL CATCH SILENT API CRASHES
+            console.error("❌ USECHAT API CRASH:", err.message);
+        },
         onFinish: (message) => {
-            // 🚨 NUCLEAR FIX 3: Trigger voice ONLY when the Vercel stream is 100% finished
+            console.log("✅ STREAM FINISHED. AI SAID:", message.content);
             const cleanText = message.content.replace(/[*#`]/g, '').trim();
             speakText(cleanText);
 
@@ -96,13 +100,24 @@ export default function InterviewApp() {
     const handleFormSubmit = (e) => {
         e.preventDefault();
         
-        // 🚨 NUCLEAR FIX 4: Refresh Chrome's audio security token exactly when you click SEND
+        console.log("🚀 1. BUTTON CLICKED! Input:", input);
+
         if (typeof window !== 'undefined') {
             window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            console.log("🔊 2. Audio queue cleared.");
         }
 
-        if (!input.trim() || isLoading) return;
+        if (!input.trim()) {
+            console.warn("⚠️ 3. Input is empty. Aborting.");
+            return;
+        }
+        
+        if (isLoading) {
+            console.warn("⚠️ 3. AI is already loading. Aborting.");
+            return;
+        }
+
+        console.log("📡 4. Handing off to Vercel useChat...");
         handleSubmit(e);
     };
 
