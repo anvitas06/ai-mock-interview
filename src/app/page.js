@@ -3,17 +3,39 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
 
+// 🚨 NUCLEAR FIX 1: Stop Chrome from silently deleting the audio from memory
+if (typeof window !== 'undefined') {
+    window.speechUtterances = []; 
+}
+
 export default function InterviewApp() {
     const [view, setView] = useState('landing');
     const [selectedRole, setSelectedRole] = useState(null);
     const [level, setLevel] = useState('Junior');
     const [history, setHistory] = useState([]);
     const [isMounted, setIsMounted] = useState(false);
-    
     const messagesEndRef = useRef(null);
-    const lastSpokenId = useRef(null); 
 
-    // Native Vercel hook - handles streaming, chunking, and state automatically for production
+    const speakText = (text) => {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
+        window.speechSynthesis.cancel(); 
+        
+        if (!text || text.length < 2) return;
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        
+        // Priority to English voices
+        const voices = window.speechSynthesis.getVoices();
+        utterance.voice = voices.find(v => v.lang.includes('en-US')) || voices[0];
+        
+        // 🚨 NUCLEAR FIX 2: Push to global array to prevent Garbage Collection bug
+        window.speechUtterances.push(utterance);
+        
+        window.speechSynthesis.speak(utterance);
+        console.log("🔊 AI is saying:", text);
+    };
+
     const { messages, input, handleInputChange, handleSubmit, setMessages, isLoading } = useChat({
         api: '/api/chat',
         body: {
@@ -21,7 +43,10 @@ export default function InterviewApp() {
             level: level,
         },
         onFinish: (message) => {
-            // Generate report reliably after stream finishes
+            // 🚨 NUCLEAR FIX 3: Trigger voice ONLY when the Vercel stream is 100% finished
+            const cleanText = message.content.replace(/[*#`]/g, '').trim();
+            speakText(cleanText);
+
             if (message.content.includes("Score:")) {
                 const scoreMatch = message.content.match(/Score:\s*(\d+\/\d+)/i);
                 const newRecord = {
@@ -51,49 +76,32 @@ export default function InterviewApp() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, view]);
 
-    // Trigger voice ONLY when the AI finishes its thought to bypass deployment chunking bugs
-    useEffect(() => {
-        if (messages.length === 0 || isLoading) return;
-        
-        const lastMsg = messages[messages.length - 1];
-        if (lastMsg.role === 'assistant' && lastSpokenId.current !== lastMsg.id) {
-            const cleanText = lastMsg.content.replace(/[*#`]/g, '').trim();
-            speakText(cleanText);
-            lastSpokenId.current = lastMsg.id;
-        }
-    }, [messages, isLoading]);
-
-    const speakText = (text) => {
-        if (typeof window === 'undefined' || !window.speechSynthesis) return;
-        window.speechSynthesis.cancel(); 
-        
-        if (!text || text.length < 2) return;
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        const voices = window.speechSynthesis.getVoices();
-        utterance.voice = voices.find(v => v.lang.includes('en-US')) || voices[0];
-        window.speechSynthesis.speak(utterance);
-        console.log("🔊 AI is saying:", text);
-    };
-
     const startInterview = (role) => {
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); // Browser audio unlock gesture
+        // Prime audio engine
+        if (typeof window !== 'undefined') {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+        }
+        
         setSelectedRole(role);
         setView('interview');
-        
-        // Clear previous chat context
         setMessages([]);
-        lastSpokenId.current = null;
         
         const firstMsgContent = `Hello. I am your ${level} level Mentor for ${role}. Question 1: Can you introduce yourself and tell me about your experience?`;
         
         setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsgContent }]);
+        setTimeout(() => speakText(firstMsgContent), 500);
     };
 
     const handleFormSubmit = (e) => {
         e.preventDefault();
-        window.speechSynthesis.cancel(); // Stop talking when user replies
+        
+        // 🚨 NUCLEAR FIX 4: Refresh Chrome's audio security token exactly when you click SEND
+        if (typeof window !== 'undefined') {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+        }
+
         if (!input.trim() || isLoading) return;
         handleSubmit(e);
     };
