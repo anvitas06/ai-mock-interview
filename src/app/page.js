@@ -83,6 +83,7 @@ export default function InterviewApp() {
     };
 
     // 🚨 RAW JAVASCRIPT FETCH (Unbreakable by package updates)
+    // 🚨 RAW JAVASCRIPT FETCH 
     const handleFinalSubmit = async (e) => {
         e.preventDefault();
         stopVoice();
@@ -93,30 +94,29 @@ export default function InterviewApp() {
         setTextInput(""); 
         setIsLoading(true);
 
-        // 1. Add user message to UI immediately
         const updatedMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
         setMessages(updatedMessages);
 
+        // 🚨 We must declare 'response' up here so Claude's catch block can see it!
+        let response; 
+
         try {
-            // 2. Talk to backend directly
-            const response = await fetch('/api/chat', {
+            response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages: updatedMessages, role: selectedRole, level: level }),
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Server responded with an error.");
+                // This triggers the catch block below if the server crashes
+                throw new Error(`Server failed with status: ${response.status}`);
             }
 
-            // 3. Manually read the stream
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let aiResponseText = "";
             const assistantMessageId = (Date.now() + 1).toString();
 
-            // Add an empty AI message to the screen to start filling
             setMessages(prev => [...prev, { id: assistantMessageId, role: 'assistant', content: "" }]);
 
             while (true) {
@@ -125,17 +125,21 @@ export default function InterviewApp() {
                 
                 aiResponseText += decoder.decode(value, { stream: true });
                 
-                // Update the UI as text flows in
                 setMessages(prev => prev.map(msg => 
                     msg.id === assistantMessageId ? { ...msg, content: aiResponseText } : msg
                 ));
             }
 
-            // Speak only when finished
             speakText(aiResponseText);
 
+        // 🚨 CLAUDE'S GUARDRAIL ADDED HERE
         } catch (error) {
-            alert("NETWORK ERROR: " + error.message);
+            let msg = error.message;    
+            try { 
+                const d = await response?.json(); 
+                msg = d?.error || msg; 
+            } catch {}    
+            alert("NETWORK ERROR: " + msg);
         } finally {
             setIsLoading(false);
         }
