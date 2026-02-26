@@ -35,8 +35,8 @@ export default function InterviewApp() {
         window.speechSynthesis.speak(utterance);
     };
 
-    // 🚨 ADDED "onError" TO CATCH SILENT CRASHES
-    const { messages, append, setMessages, isLoading } = useChat({
+    // 🚨 UPDATED: Captured the entire useChat object to check its contents safely
+    const chat = useChat({
         api: '/api/chat',
         body: { role: selectedRole, level: level },
         onFinish: (message) => {
@@ -47,6 +47,9 @@ export default function InterviewApp() {
             alert("SERVER ERROR: " + err.message + "\nCheck Vercel Logs or your GROQ API Key!");
         }
     });
+
+    // Safely extract just the visual elements we need
+    const { messages, setMessages, isLoading } = chat;
 
     const startListening = () => {
         if (isListening) {
@@ -101,16 +104,20 @@ export default function InterviewApp() {
         if (!textInput.trim() || isLoading) return;
         
         try {
-            // 🚨 SAFETY CHECK: Is Vercel actually giving us the append function?
-            if (typeof append !== 'function') {
-                alert("CRASH REASON: Vercel's 'append' function is missing! The SDK update did not work.");
+            // 🚨 THE COMPATIBILITY LAYER
+            // Checks what version of the SDK Vercel actually loaded and uses the correct command
+            if (typeof chat.append === 'function') {
+                chat.append({ role: 'user', content: textInput });
+            } else if (typeof chat.handleSubmit === 'function' && typeof chat.setInput === 'function') {
+                chat.setInput(textInput);
+                // Tiny delay to let the legacy state catch up before submitting
+                setTimeout(() => chat.handleSubmit(e), 50); 
+            } else {
+                alert("CRASH REASON: Vercel AI SDK is completely missing both 'append' and 'handleSubmit'.");
                 return;
             }
-            
-            append({ role: 'user', content: textInput });
             setTextInput(""); 
         } catch (error) {
-            // 🚨 EXACT ERROR TRAP
             alert("CRASH REASON: " + error.message);
         }
     };
@@ -131,8 +138,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.1</h1>
-                        <p style={{ color: '#94a3b8' }}>Debug Mode Enabled</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.2</h1>
+                        <p style={{ color: '#94a3b8' }}>Universal SDK Compatibility</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
