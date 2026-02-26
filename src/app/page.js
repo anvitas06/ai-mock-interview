@@ -8,15 +8,14 @@ export default function InterviewApp() {
     const [view, setView] = useState('landing');
     const [selectedRole, setSelectedRole] = useState(null);
     const [level, setLevel] = useState('Junior');
-    const [cooldown, setCooldown] = useState(0); 
     const [isListening, setIsListening] = useState(false);
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
 
-    // 1. Safe Mounting
+    // Safe Mounting
     useEffect(() => { setIsMounted(true); }, []);
 
-    // 2. TTS: Voice Output
+    // TTS: Voice Output
     const stopVoice = () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
@@ -35,8 +34,8 @@ export default function InterviewApp() {
         window.speechSynthesis.speak(utterance);
     };
 
-    // 3. AI SDK Connection (🚨 ADDED setInput here)
-    const { messages, input, setInput, handleSubmit, setMessages, isLoading } = useChat({
+    // AI SDK Connection (Clean, no timers)
+    const { messages, input, setInput, handleInputChange, handleSubmit, setMessages, isLoading } = useChat({
         api: '/api/chat',
         body: { role: selectedRole, level: level },
         onFinish: (message) => {
@@ -44,7 +43,7 @@ export default function InterviewApp() {
         }
     });
 
-    // 4. STT: Voice Input (Microphone) - 🚨 FIXED to use setInput
+    // STT: Voice Input (Microphone)
     const startListening = () => {
         if (isListening) {
             recognitionRef.current?.stop();
@@ -69,21 +68,14 @@ export default function InterviewApp() {
         
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            // Directly update the text box state
+            // Add spoken text to whatever is already in the input box
             setInput(input ? input + " " + transcript : transcript);
         };
 
         recognition.start();
     };
 
-    // 5. Timers & Auto-scroll
-    useEffect(() => {
-        if (cooldown > 0) {
-            const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
-            return () => clearTimeout(timer);
-        }
-    }, [cooldown]);
-
+    // Auto-scroll to newest message
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
@@ -93,22 +85,20 @@ export default function InterviewApp() {
         setSelectedRole(role);
         setView('interview');
         setMessages([]);
-        setCooldown(0);
         
         const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
         setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
         setTimeout(() => speakText(firstMsg), 500);
     };
 
+    // Simple Submit Handler
     const handleFinalSubmit = (e) => {
-        e.preventDefault();
+        e.preventDefault(); // Stop page refresh
         stopVoice();
         if (isListening) recognitionRef.current?.stop();
-        if (cooldown > 0 || !input?.trim() || isLoading) return;
+        if (!input?.trim() || isLoading) return;
         
-        handleSubmit(e);
-        // 🚨 FIXED: Changed from 300 seconds (5 min) to 3 seconds!
-        setCooldown(3); 
+        handleSubmit(e); // Send to AI
     };
 
     if (!isMounted) return null;
@@ -127,8 +117,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 2.0</h1>
-                        <p style={{ color: '#94a3b8' }}>Voice-enabled Technical Interviews</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 2.1</h1>
+                        <p style={{ color: '#94a3b8' }}>Unrestricted Voice & Text Mode</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -168,16 +158,15 @@ export default function InterviewApp() {
                             </div>
                         </div>
 
-                        {/* 🚨 FIXED INPUT FORM */}
                         <form onSubmit={handleFinalSubmit} style={{ display: 'flex', gap: '10px', background: '#1e293b', padding: '10px', borderRadius: '50px', marginBottom: '20px' }}>
                             <input 
-                                value={input || ""} 
-                                onChange={(e) => setInput(e.target.value)} 
-                                disabled={isLoading || cooldown > 0} 
-                                placeholder={cooldown > 0 ? `Wait ${cooldown}s...` : "Type your answer..."} 
+                                value={input} 
+                                onChange={handleInputChange} 
+                                disabled={isLoading} 
+                                placeholder="Type your answer here..." 
                                 style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none', fontSize: '16px' }} 
                             />
-                            <button type="submit" disabled={isLoading || cooldown > 0 || !input?.trim()} style={{ background: (isLoading || cooldown > 0) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: 'pointer' }}>
+                            <button type="submit" disabled={isLoading || !input?.trim()} style={{ background: isLoading ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: isLoading ? 'not-allowed' : 'pointer' }}>
                                 SEND
                             </button>
                         </form>
