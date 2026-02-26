@@ -11,31 +11,25 @@ export async function POST(req) {
   try {
     const { messages, role, level } = await req.json();
 
-    // 1. Keep prompt short to prevent 429 Rate Limits
-    let systemPrompt = `You are a strict ${level} technical interviewer for a ${role} position. Ask one short question at a time.`;
+    // Count how many questions AI has asked
+    const aiCount = messages.filter(m => m.role === 'assistant').length;
 
-    // 2. Safety Net / Report Trigger
-    if (messages.length >= 7) {
-      systemPrompt = `THE INTERVIEW IS OVER. Summarize the user's performance. You MUST end your response exactly with "Score: X/10".`;
+    let systemPrompt = `You are a strict ${level} interviewer for ${role}. Ask one short technical question.`;
+
+    // 🛑 After 3 AI turns, force the score report
+    if (aiCount >= 3) {
+      systemPrompt = `INTERVIEW OVER. Summarize the user's performance for a ${level} level. 
+      You MUST end the response with: "Score: X/10".`;
     }
-
-    // 3. Limit history to the last 2 messages to avoid payload limits
-    const limitedHistory = messages.slice(-2).map(m => ({
-      role: m.role === 'ai' || m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content || m.text
-    }));
 
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: systemPrompt,
-      messages: limitedHistory,
+      messages: messages.slice(-4), // Small history keeps token usage low
     });
 
-    // The useChat hook expects this specific response format
     return result.toDataStreamResponse();
-
   } catch (error) {
-    console.error('[Backend Error]:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Server Busy" }), { status: 429 });
   }
 }
