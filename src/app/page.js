@@ -10,7 +10,6 @@ export default function InterviewApp() {
     const [level, setLevel] = useState('Junior');
     const [isListening, setIsListening] = useState(false);
     
-    // 🚨 OUR CUSTOM, CRASH-PROOF INPUT STATE
     const [textInput, setTextInput] = useState(""); 
     
     const messagesEndRef = useRef(null);
@@ -36,12 +35,16 @@ export default function InterviewApp() {
         window.speechSynthesis.speak(utterance);
     };
 
-    // 🚨 WE ONLY USE "messages" AND "append" FROM VERCEL NOW
+    // 🚨 ADDED "onError" TO CATCH SILENT CRASHES
     const { messages, append, setMessages, isLoading } = useChat({
         api: '/api/chat',
         body: { role: selectedRole, level: level },
         onFinish: (message) => {
             if (message?.content) speakText(message.content);
+        },
+        onError: (err) => {
+            console.error("🚨 BACKEND CRASH:", err);
+            alert("SERVER ERROR: " + err.message + "\nCheck Vercel Logs or your GROQ API Key!");
         }
     });
 
@@ -69,7 +72,6 @@ export default function InterviewApp() {
         
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            // 🚨 Safely update our custom state with the voice text
             setTextInput(prev => prev ? prev + " " + transcript : transcript);
         };
 
@@ -85,23 +87,38 @@ export default function InterviewApp() {
         setSelectedRole(role);
         setView('interview');
         setMessages([]);
-        setTextInput(""); // Clear box
+        setTextInput(""); 
         
         const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
         setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
         setTimeout(() => speakText(firstMsg), 500);
     };
 
-    // 🚨 CUSTOM SUBMIT HANDLER
     const handleFinalSubmit = (e) => {
         e.preventDefault();
+        console.log("🚀 SEND BUTTON CLICKED. Attempting to send:", textInput);
+        
         stopVoice();
         if (isListening) recognitionRef.current?.stop();
-        if (!textInput.trim() || isLoading) return;
         
-        // Force the message to the AI manually
-        append({ role: 'user', content: textInput });
-        setTextInput(""); // Empty the box instantly after sending
+        if (!textInput.trim()) {
+            console.log("⚠️ Blocked: Text input is empty.");
+            return;
+        }
+        if (isLoading) {
+            console.log("⚠️ Blocked: AI is still loading previous response.");
+            return;
+        }
+        
+        try {
+            // Added explicit ID to prevent SDK confusion
+            append({ id: Date.now().toString(), role: 'user', content: textInput });
+            console.log("✅ Message passed to AI SDK successfully.");
+            setTextInput(""); 
+        } catch (error) {
+            console.error("❌ APPEND FAILED:", error);
+            alert("Frontend crashed trying to send the message.");
+        }
     };
 
     if (!isMounted) return null;
@@ -120,8 +137,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.0</h1>
-                        <p style={{ color: '#94a3b8' }}>Custom State Override</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.1</h1>
+                        <p style={{ color: '#94a3b8' }}>Debug Mode Enabled</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -161,7 +178,6 @@ export default function InterviewApp() {
                             </div>
                         </div>
 
-                        {/* 🚨 SAFELY CONTROLLED INPUT FORM */}
                         <form onSubmit={handleFinalSubmit} style={{ display: 'flex', gap: '10px', background: '#1e293b', padding: '10px', borderRadius: '50px', marginBottom: '20px' }}>
                             <input 
                                 value={textInput} 
