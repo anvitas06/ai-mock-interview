@@ -9,7 +9,6 @@ export default function InterviewApp() {
     const [selectedRole, setSelectedRole] = useState(null);
     const [level, setLevel] = useState('Junior');
     const [isListening, setIsListening] = useState(false);
-    
     const [textInput, setTextInput] = useState(""); 
     
     const messagesEndRef = useRef(null);
@@ -47,8 +46,9 @@ export default function InterviewApp() {
         }
     });
 
-    // Safely destructure the visual elements
-    const { messages, setMessages, isLoading } = chat || {};
+    const { messages, setMessages, status } = chat || {};
+    // Lock button if AI is actively typing
+    const isBusy = status === 'in_progress';
 
     const startListening = () => {
         if (isListening) {
@@ -96,35 +96,27 @@ export default function InterviewApp() {
         setTimeout(() => speakText(firstMsg), 500);
     };
 
+    // 🚨 THE UNBREAKABLE SUBMIT BUTTON
     const handleFinalSubmit = (e) => {
         e.preventDefault();
         stopVoice();
         if (isListening) recognitionRef.current?.stop();
-        if (!textInput.trim() || isLoading) return;
+        if (!textInput.trim() || isBusy) return;
         
         try {
-            if (!chat) {
-                alert("CRASH: The useChat tool failed to start.");
-                return;
-            }
-
-            // 🚨 THE FIX: Hooking directly into the 'sendMessage' tool Vercel revealed
-            if (typeof chat.append === 'function') {
-                chat.append({ role: 'user', content: textInput });
-            } else if (typeof chat.sendMessage === 'function') {
-                // Vercel changed the name to sendMessage! We use it here.
+            // We know 'sendMessage' is exactly what Vercel provided based on your error log
+            if (chat && typeof chat.sendMessage === 'function') {
+                // Try sending it as a message object first
                 try {
                     chat.sendMessage({ role: 'user', content: textInput });
                 } catch (err) {
-                    // Fallback just in case Vercel wants a plain string instead of an object
+                    // Fallback to sending it as a raw string
                     chat.sendMessage(textInput);
                 }
+                setTextInput(""); 
             } else {
-                alert("CRASH: Impossible Error. Available tools: " + Object.keys(chat).join(", "));
-                return;
+                alert("CRASH: Vercel failed to load the sendMessage tool.");
             }
-            
-            setTextInput(""); // Clear the box immediately
         } catch (error) {
             alert("CRASH REASON: " + error.message);
         }
@@ -146,8 +138,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.5</h1>
-                        <p style={{ color: '#94a3b8' }}>Dynamic API Bypass</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 4.0</h1>
+                        <p style={{ color: '#94a3b8' }}>Direct SendMessage API</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -191,11 +183,11 @@ export default function InterviewApp() {
                             <input 
                                 value={textInput} 
                                 onChange={(e) => setTextInput(e.target.value)} 
-                                disabled={isLoading} 
+                                disabled={isBusy} 
                                 placeholder="Type your answer here..." 
                                 style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none', fontSize: '16px' }} 
                             />
-                            <button type="submit" disabled={isLoading || !textInput.trim()} style={{ background: (isLoading || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: (isLoading || !textInput.trim()) ? 'not-allowed' : 'pointer' }}>
+                            <button type="submit" disabled={isBusy || !textInput.trim()} style={{ background: (isBusy || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: (isBusy || !textInput.trim()) ? 'not-allowed' : 'pointer' }}>
                                 SEND
                             </button>
                         </form>
@@ -220,7 +212,7 @@ export default function InterviewApp() {
                                     </div>
                                 );
                             })}
-                            {isLoading && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
+                            {isBusy && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
                             <div ref={messagesEndRef} />
                         </div>
                     </div>
