@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-// 🚨 CHANGED IMPORT: Forcing Vercel to use the older, cached package path
-import { useChat } from 'ai/react'; 
+// 🚨 RESTORED IMPORT: Going back to the exact path Vercel expects
+import { useChat } from '@ai-sdk/react'; 
 import ReactMarkdown from 'react-markdown';
 
 export default function InterviewApp() {
@@ -48,7 +48,8 @@ export default function InterviewApp() {
         }
     });
 
-    const { messages, setMessages, isLoading } = chat || {};
+    // Safely destructure what we need
+    const { messages, setMessages, isLoading, append, handleSubmit, setInput } = chat || {};
 
     const startListening = () => {
         if (isListening) {
@@ -104,18 +105,22 @@ export default function InterviewApp() {
         
         try {
             if (!chat) {
-                alert("CRASH: The useChat tool failed to start completely.");
+                alert("CRASH: The useChat tool failed to start.");
                 return;
             }
 
-            if (typeof chat.append === 'function') {
-                chat.append({ role: 'user', content: textInput });
-                setTextInput(""); 
+            // Radar logic to use whatever tool Vercel actually provides
+            if (typeof append === 'function') {
+                append({ role: 'user', content: textInput });
+            } else if (typeof handleSubmit === 'function' && typeof setInput === 'function') {
+                setInput(textInput);
+                setTimeout(() => handleSubmit(e), 50);
             } else {
-                // 🚨 RADAR ALERT: Print exactly what Vercel has available
                 const availableTools = Object.keys(chat).join(", ");
-                alert("STILL MISSING APPEND! But Vercel DOES have these tools: " + availableTools);
+                alert("STILL MISSING SEND FUNCTIONS! Vercel DOES have these tools: " + availableTools);
+                return;
             }
+            setTextInput(""); 
         } catch (error) {
             alert("CRASH REASON: " + error.message);
         }
@@ -137,8 +142,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.3</h1>
-                        <p style={{ color: '#94a3b8' }}>Legacy SDK Override</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.4</h1>
+                        <p style={{ color: '#94a3b8' }}>Restored Build Compatibility</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
