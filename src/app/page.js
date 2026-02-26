@@ -122,17 +122,27 @@ export default function InterviewApp() {
             let aiResponseText = "";
             const assistantMessageId = (Date.now() + 1).toString();
 
-            setMessages(prev => [...prev, { id: assistantMessageId, role: 'assistant', content: "" }]);
-
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 
                 aiResponseText += decoder.decode(value, { stream: true });
                 
-                setMessages(prev => prev.map(msg => 
-                    msg.id === assistantMessageId ? { ...msg, content: aiResponseText } : msg
-                ));
+                // 🚨 BULLETPROOF UI UPDATE: Forces React to draw the text box even if it gets confused
+                setMessages(prev => {
+                    // Check if the AI text bubble already exists on screen
+                    const messageExists = prev.some(msg => msg.id === assistantMessageId);
+                    
+                    if (messageExists) {
+                        // If it exists, update it with the new words
+                        return prev.map(msg => 
+                            msg.id === assistantMessageId ? { ...msg, content: aiResponseText } : msg
+                        );
+                    } else {
+                        // If it doesn't exist yet, force React to create it right now
+                        return [...prev, { id: assistantMessageId, role: 'assistant', content: aiResponseText }];
+                    }
+                });
             }
 
             speakText(aiResponseText);
