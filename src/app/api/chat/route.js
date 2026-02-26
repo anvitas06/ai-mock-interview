@@ -30,13 +30,13 @@ export async function POST(req) {
       You MUST end your response with the exact text: "Score: X/10" (replace X with their actual score based on a strict evaluation).`;
     }
 
-    const result = streamText({
+    // 🚨 ADDED "await": This forces Vercel's older SDK to finish processing the stream!
+    const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: systemInstruction,
       messages: messages.slice(-6), 
     });
 
-    // 🚨 THE SMART FALLBACK: Checks Vercel's SDK version and uses the correct streaming command
     if (typeof result.toDataStreamResponse === 'function') {
         return result.toDataStreamResponse();
     } else if (typeof result.toTextStreamResponse === 'function') {
@@ -44,7 +44,6 @@ export async function POST(req) {
     } else if (typeof result.toAIStreamResponse === 'function') {
         return result.toAIStreamResponse();
     } else if (result.textStream) {
-        // Ultimate fallback: Manually stream the text if standard commands are totally gone
         return new Response(result.textStream, {
             headers: { 'Content-Type': 'text/plain; charset=utf-8' }
         });
