@@ -1,13 +1,11 @@
 import { streamText } from 'ai';
 import { createGroq } from '@ai-sdk/groq';
 
-// 🚨 FORCE-DYNAMIC: Tells Vercel to NEVER cache this route
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
 export async function POST(req) {
   try {
-    // 🚨 Moved INSIDE the try/catch block so it can't crash the server build
     const apiKey = process.env.GROQ_API_KEY;
     
     if (!apiKey) {
@@ -38,11 +36,24 @@ export async function POST(req) {
       messages: messages.slice(-6), 
     });
 
-    return result.toDataStreamResponse();
+    // 🚨 THE SMART FALLBACK: Checks Vercel's SDK version and uses the correct streaming command
+    if (typeof result.toDataStreamResponse === 'function') {
+        return result.toDataStreamResponse();
+    } else if (typeof result.toTextStreamResponse === 'function') {
+        return result.toTextStreamResponse();
+    } else if (typeof result.toAIStreamResponse === 'function') {
+        return result.toAIStreamResponse();
+    } else if (result.textStream) {
+        // Ultimate fallback: Manually stream the text if standard commands are totally gone
+        return new Response(result.textStream, {
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+    } else {
+        throw new Error("Vercel AI SDK is missing all known streaming commands.");
+    }
 
   } catch (error) {
     console.error("Backend Error Caught:", error);
-    // 🚨 THIS WILL NOW PRINT THE EXACT ERROR ON YOUR SCREEN
     return new Response(JSON.stringify({ error: `Backend Crash: ${error.message}` }), { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }
