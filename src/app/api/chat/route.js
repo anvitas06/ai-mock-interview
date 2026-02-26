@@ -11,25 +11,27 @@ export async function POST(req) {
   try {
     const { messages, role, level } = await req.json();
 
-    // 1. Filter only AI messages to count the questions asked
+    // 1. Count AI turns to strictly enforce the 3-question limit
     const aiQuestions = messages.filter(m => m.role === 'assistant');
     const questionCount = aiQuestions.length;
 
-    // 2. Adjust instructions based on the interview progress
-    let systemInstruction = `You are a strict technical interviewer. You are interviewing a ${level} candidate for a ${role} position. Ask exactly one technical question. Keep it brief.`;
+    // 2. Dynamic Prompting
+    let systemInstruction = `You are a strict technical interviewer. You are interviewing a ${level} candidate for a ${role} position. Ask exactly one technical question. Keep it brief. Do not provide the answer.`;
 
+    // 3. Trigger Report
     if (questionCount >= 3) {
       systemInstruction = `THE INTERVIEW IS OVER. 
-      Provide a concise summary of the candidate's performance. 
-      List their strengths and weaknesses. 
-      You MUST end your response with the text: "Score: X/10" (where X is their actual score).`;
+      Do not ask any more questions.
+      Provide a concise summary of the candidate's performance based on their answers. 
+      List 1 strength and 1 area for improvement. 
+      You MUST end your response with the exact text: "Score: X/10" (replace X with their actual score based on a strict evaluation).`;
     }
 
-    // 3. Stream the response back to the v6 frontend
+    // 4. Stream response
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: systemInstruction,
-      messages: messages.slice(-6), // Keeps memory lean and avoids API rate limits
+      messages: messages.slice(-6), // Keeps token limits low
     });
 
     return result.toDataStreamResponse();
