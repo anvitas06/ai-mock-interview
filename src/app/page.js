@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-// 🚨 RESTORED IMPORT: Going back to the exact path Vercel expects
 import { useChat } from '@ai-sdk/react'; 
 import ReactMarkdown from 'react-markdown';
 
@@ -48,8 +47,8 @@ export default function InterviewApp() {
         }
     });
 
-    // Safely destructure what we need
-    const { messages, setMessages, isLoading, append, handleSubmit, setInput } = chat || {};
+    // Safely destructure the visual elements
+    const { messages, setMessages, isLoading } = chat || {};
 
     const startListening = () => {
         if (isListening) {
@@ -109,18 +108,23 @@ export default function InterviewApp() {
                 return;
             }
 
-            // Radar logic to use whatever tool Vercel actually provides
-            if (typeof append === 'function') {
-                append({ role: 'user', content: textInput });
-            } else if (typeof handleSubmit === 'function' && typeof setInput === 'function') {
-                setInput(textInput);
-                setTimeout(() => handleSubmit(e), 50);
+            // 🚨 THE FIX: Hooking directly into the 'sendMessage' tool Vercel revealed
+            if (typeof chat.append === 'function') {
+                chat.append({ role: 'user', content: textInput });
+            } else if (typeof chat.sendMessage === 'function') {
+                // Vercel changed the name to sendMessage! We use it here.
+                try {
+                    chat.sendMessage({ role: 'user', content: textInput });
+                } catch (err) {
+                    // Fallback just in case Vercel wants a plain string instead of an object
+                    chat.sendMessage(textInput);
+                }
             } else {
-                const availableTools = Object.keys(chat).join(", ");
-                alert("STILL MISSING SEND FUNCTIONS! Vercel DOES have these tools: " + availableTools);
+                alert("CRASH: Impossible Error. Available tools: " + Object.keys(chat).join(", "));
                 return;
             }
-            setTextInput(""); 
+            
+            setTextInput(""); // Clear the box immediately
         } catch (error) {
             alert("CRASH REASON: " + error.message);
         }
@@ -142,8 +146,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.4</h1>
-                        <p style={{ color: '#94a3b8' }}>Restored Build Compatibility</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.5</h1>
+                        <p style={{ color: '#94a3b8' }}>Dynamic API Bypass</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
