@@ -35,7 +35,16 @@ export default function InterviewApp() {
         window.speechSynthesis.speak(utterance);
     };
 
-    // 3. STT: Voice Input (Microphone)
+    // 3. AI SDK Connection (🚨 ADDED setInput here)
+    const { messages, input, setInput, handleSubmit, setMessages, isLoading } = useChat({
+        api: '/api/chat',
+        body: { role: selectedRole, level: level },
+        onFinish: (message) => {
+            if (message?.content) speakText(message.content);
+        }
+    });
+
+    // 4. STT: Voice Input (Microphone) - 🚨 FIXED to use setInput
     const startListening = () => {
         if (isListening) {
             recognitionRef.current?.stop();
@@ -60,21 +69,12 @@ export default function InterviewApp() {
         
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            // Force the AI SDK input state to update
-            handleInputChange({ target: { value: input ? input + " " + transcript : transcript } });
+            // Directly update the text box state
+            setInput(input ? input + " " + transcript : transcript);
         };
 
         recognition.start();
     };
-
-    // 4. AI SDK Connection
-    const { messages, input, handleInputChange, handleSubmit, setMessages, isLoading } = useChat({
-        api: '/api/chat',
-        body: { role: selectedRole, level: level },
-        onFinish: (message) => {
-            if (message?.content) speakText(message.content);
-        }
-    });
 
     // 5. Timers & Auto-scroll
     useEffect(() => {
@@ -107,14 +107,14 @@ export default function InterviewApp() {
         if (cooldown > 0 || !input?.trim() || isLoading) return;
         
         handleSubmit(e);
-        setCooldown(300); // 5 minute rate limit
+        // 🚨 FIXED: Changed from 300 seconds (5 min) to 3 seconds!
+        setCooldown(3); 
     };
 
     if (!isMounted) return null;
 
     return (
         <div style={{ padding: '20px', background: '#0f172a', color: '#fff', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-            {/* CSS for Pulse Animation */}
             <style>{`
                 @keyframes pulse {
                     0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
@@ -127,7 +127,7 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 1.0</h1>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 2.0</h1>
                         <p style={{ color: '#94a3b8' }}>Voice-enabled Technical Interviews</p>
                         
                         <div style={{ margin: '40px 0' }}>
@@ -144,7 +144,6 @@ export default function InterviewApp() {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '90vh' }}>
-                        {/* Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <div>
                                 <h2 style={{ margin: 0 }}>{selectedRole}</h2>
@@ -153,7 +152,6 @@ export default function InterviewApp() {
                             <button onClick={() => { stopVoice(); setView('landing'); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer' }}>End Interview</button>
                         </div>
                         
-                        {/* Voice Agent UI */}
                         <div style={{ background: '#1e293b', borderRadius: '20px', padding: '30px', textAlign: 'center', marginBottom: '20px', border: '1px solid #334155' }}>
                             <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <button 
@@ -170,13 +168,13 @@ export default function InterviewApp() {
                             </div>
                         </div>
 
-                        {/* Text Backup & Submit Form */}
+                        {/* 🚨 FIXED INPUT FORM */}
                         <form onSubmit={handleFinalSubmit} style={{ display: 'flex', gap: '10px', background: '#1e293b', padding: '10px', borderRadius: '50px', marginBottom: '20px' }}>
                             <input 
                                 value={input || ""} 
-                                onChange={handleInputChange} 
+                                onChange={(e) => setInput(e.target.value)} 
                                 disabled={isLoading || cooldown > 0} 
-                                placeholder={cooldown > 0 ? `Rate limit cooldown: ${Math.ceil(cooldown/60)}m` : "Type your answer..."} 
+                                placeholder={cooldown > 0 ? `Wait ${cooldown}s...` : "Type your answer..."} 
                                 style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none', fontSize: '16px' }} 
                             />
                             <button type="submit" disabled={isLoading || cooldown > 0 || !input?.trim()} style={{ background: (isLoading || cooldown > 0) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -184,7 +182,6 @@ export default function InterviewApp() {
                             </button>
                         </form>
 
-                        {/* History / Score Report Log */}
                         <div style={{ flex: 1, overflowY: 'auto', background: '#020617', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '15px', border: '1px solid #1e293b' }}>
                             {messages?.map((m) => {
                                 const isReport = m.content?.includes("Score:");
