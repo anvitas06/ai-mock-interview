@@ -9,27 +9,33 @@ const groq = createGroq({
 
 export async function POST(req) {
   try {
-    const { messages, role } = await req.json();
+    const { messages, role, level } = await req.json();
 
-    // ULTRA-SHORT PROMPT: Every character counts toward your 429 limit
-    const systemPrompt = `Interviewer for ${role}. Ask 1 short question. End with "Score: 8/10" after 3 turns.`;
+    // 1. Keep prompt short to prevent 429 Rate Limits
+    let systemPrompt = `You are a strict ${level} technical interviewer for a ${role} position. Ask one short question at a time.`;
 
-    // THE 1-MESSAGE RULE: Only send the last message. 
-    // This makes the request tiny so it never hits the 429 limit.
-    const lastMessage = messages.slice(-1).map(m => ({
-      role: m.role === 'ai' ? 'assistant' : 'user',
-      content: m.text
+    // 2. Safety Net / Report Trigger
+    if (messages.length >= 7) {
+      systemPrompt = `THE INTERVIEW IS OVER. Summarize the user's performance. You MUST end your response exactly with "Score: X/10".`;
+    }
+
+    // 3. Limit history to the last 2 messages to avoid payload limits
+    const limitedHistory = messages.slice(-2).map(m => ({
+      role: m.role === 'ai' || m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content || m.text
     }));
 
-    const result = await streamText({
+    const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: systemPrompt,
-      messages: lastMessage, 
+      messages: limitedHistory,
     });
 
-    return new Response(result.textStream);
+    // The useChat hook expects this specific response format
+    return result.toDataStreamResponse();
 
   } catch (error) {
-    return new Response("Server Busy", { status: 429 });
+    console.error('[Backend Error]:', error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
