@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { useChat } from '@ai-sdk/react';
+// 🚨 CHANGED IMPORT: Forcing Vercel to use the older, cached package path
+import { useChat } from 'ai/react'; 
 import ReactMarkdown from 'react-markdown';
 
 export default function InterviewApp() {
@@ -35,7 +36,6 @@ export default function InterviewApp() {
         window.speechSynthesis.speak(utterance);
     };
 
-    // 🚨 UPDATED: Captured the entire useChat object to check its contents safely
     const chat = useChat({
         api: '/api/chat',
         body: { role: selectedRole, level: level },
@@ -44,12 +44,11 @@ export default function InterviewApp() {
         },
         onError: (err) => {
             console.error("🚨 BACKEND CRASH:", err);
-            alert("SERVER ERROR: " + err.message + "\nCheck Vercel Logs or your GROQ API Key!");
+            alert("SERVER ERROR: " + err.message);
         }
     });
 
-    // Safely extract just the visual elements we need
-    const { messages, setMessages, isLoading } = chat;
+    const { messages, setMessages, isLoading } = chat || {};
 
     const startListening = () => {
         if (isListening) {
@@ -89,11 +88,11 @@ export default function InterviewApp() {
         stopVoice();
         setSelectedRole(role);
         setView('interview');
-        setMessages([]);
+        if (setMessages) setMessages([]);
         setTextInput(""); 
         
         const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
-        setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
+        if (setMessages) setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
         setTimeout(() => speakText(firstMsg), 500);
     };
 
@@ -104,19 +103,19 @@ export default function InterviewApp() {
         if (!textInput.trim() || isLoading) return;
         
         try {
-            // 🚨 THE COMPATIBILITY LAYER
-            // Checks what version of the SDK Vercel actually loaded and uses the correct command
-            if (typeof chat.append === 'function') {
-                chat.append({ role: 'user', content: textInput });
-            } else if (typeof chat.handleSubmit === 'function' && typeof chat.setInput === 'function') {
-                chat.setInput(textInput);
-                // Tiny delay to let the legacy state catch up before submitting
-                setTimeout(() => chat.handleSubmit(e), 50); 
-            } else {
-                alert("CRASH REASON: Vercel AI SDK is completely missing both 'append' and 'handleSubmit'.");
+            if (!chat) {
+                alert("CRASH: The useChat tool failed to start completely.");
                 return;
             }
-            setTextInput(""); 
+
+            if (typeof chat.append === 'function') {
+                chat.append({ role: 'user', content: textInput });
+                setTextInput(""); 
+            } else {
+                // 🚨 RADAR ALERT: Print exactly what Vercel has available
+                const availableTools = Object.keys(chat).join(", ");
+                alert("STILL MISSING APPEND! But Vercel DOES have these tools: " + availableTools);
+            }
         } catch (error) {
             alert("CRASH REASON: " + error.message);
         }
@@ -138,8 +137,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.2</h1>
-                        <p style={{ color: '#94a3b8' }}>Universal SDK Compatibility</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 3.3</h1>
+                        <p style={{ color: '#94a3b8' }}>Legacy SDK Override</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
