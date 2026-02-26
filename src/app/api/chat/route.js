@@ -11,25 +11,34 @@ export async function POST(req) {
   try {
     const { messages, role, level } = await req.json();
 
-    // Count how many questions AI has asked
-    const aiCount = messages.filter(m => m.role === 'assistant').length;
+    // 1. Filter only AI messages to count the questions asked
+    const aiQuestions = messages.filter(m => m.role === 'assistant');
+    const questionCount = aiQuestions.length;
 
-    let systemPrompt = `You are a strict ${level} interviewer for ${role}. Ask one short technical question.`;
+    // 2. Adjust instructions based on the interview progress
+    let systemInstruction = `You are a strict technical interviewer. You are interviewing a ${level} candidate for a ${role} position. Ask exactly one technical question. Keep it brief.`;
 
-    // 🛑 After 3 AI turns, force the score report
-    if (aiCount >= 3) {
-      systemPrompt = `INTERVIEW OVER. Summarize the user's performance for a ${level} level. 
-      You MUST end the response with: "Score: X/10".`;
+    if (questionCount >= 3) {
+      systemInstruction = `THE INTERVIEW IS OVER. 
+      Provide a concise summary of the candidate's performance. 
+      List their strengths and weaknesses. 
+      You MUST end your response with the text: "Score: X/10" (where X is their actual score).`;
     }
 
+    // 3. Stream the response back to the v6 frontend
     const result = streamText({
       model: groq('llama-3.3-70b-versatile'),
-      system: systemPrompt,
-      messages: messages.slice(-4), // Small history keeps token usage low
+      system: systemInstruction,
+      messages: messages.slice(-6), // Keeps memory lean and avoids API rate limits
     });
 
     return result.toDataStreamResponse();
+
   } catch (error) {
-    return new Response(JSON.stringify({ error: "Server Busy" }), { status: 429 });
+    console.error("Backend Error:", error);
+    return new Response(JSON.stringify({ error: "Interviewer is busy. Please try again." }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
