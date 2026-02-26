@@ -104,7 +104,12 @@ export default function InterviewApp() {
             response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: updatedMessages, role: selectedRole, level: level }),
+                // 🚨 NEW CLEAN BODY: Strips out the 'id' so Groq doesn't crash
+                body: JSON.stringify({ 
+                    messages: updatedMessages.map(({ role, content }) => ({ role, content })), 
+                    role: selectedRole, 
+                    level: level 
+                }),
             });
 
             if (!response.ok) {
