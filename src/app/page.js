@@ -128,7 +128,7 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' && (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8', margin: '0' }}>Strict Mentor</h1>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8', margin: '0' }}>Strict Mentor v2</h1>
                         <p style={{ color: '#94a3b8', marginBottom: '40px' }}>AI-powered technical interviews.</p>
                         <div style={{ marginBottom: '30px' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
