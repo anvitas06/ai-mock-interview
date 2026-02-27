@@ -10,9 +10,10 @@ export default function InterviewApp() {
     const [isListening, setIsListening] = useState(false);
     const [textInput, setTextInput] = useState(""); 
     
-    // 🚨 OUR OWN RAW STATE (Bypassing Vercel's hook)
+    // 🚨 STATE FOR MESSAGES AND LIVE TYPING
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [liveAnswer, setLiveAnswer] = useState(""); // 🚨 ADDED: This shows the text while it's typing
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
@@ -69,7 +70,7 @@ export default function InterviewApp() {
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+    }, [messages, liveAnswer]);
 
     const startInterview = (role) => {
         stopVoice();
@@ -82,8 +83,6 @@ export default function InterviewApp() {
         setTimeout(() => speakText(firstMsg), 500);
     };
 
-    // 🚨 RAW JAVASCRIPT FETCH (Unbreakable by package updates)
-    // 🚨 RAW JAVASCRIPT FETCH 
     const handleFinalSubmit = async (e) => {
         e.preventDefault();
         stopVoice();
@@ -93,18 +92,17 @@ export default function InterviewApp() {
         const userText = textInput;
         setTextInput(""); 
         setIsLoading(true);
+        setLiveAnswer(""); // Reset live typing area
 
         const updatedMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
         setMessages(updatedMessages);
 
-        // 🚨 We must declare 'response' up here so Claude's catch block can see it!
         let response; 
 
         try {
             response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                // 🚨 NEW CLEAN BODY: Strips out the 'id' so Groq doesn't crash
                 body: JSON.stringify({ 
                     messages: updatedMessages.map(({ role, content }) => ({ role, content })), 
                     role: selectedRole, 
@@ -113,41 +111,30 @@ export default function InterviewApp() {
             });
 
             if (!response.ok) {
-                // This triggers the catch block below if the server crashes
                 throw new Error(`Server failed with status: ${response.status}`);
             }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let aiResponseText = "";
-            const assistantMessageId = (Date.now() + 1).toString();
+            let accumulatedText = "";
 
+            // 🚨 RAW STREAM READING LOOP
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 
-                aiResponseText += decoder.decode(value, { stream: true });
+                const chunk = decoder.decode(value, { stream: true });
+                accumulatedText += chunk;
                 
-                // 🚨 BULLETPROOF UI UPDATE: Forces React to draw the text box even if it gets confused
-                setMessages(prev => {
-                    // Check if the AI text bubble already exists on screen
-                    const messageExists = prev.some(msg => msg.id === assistantMessageId);
-                    
-                    if (messageExists) {
-                        // If it exists, update it with the new words
-                        return prev.map(msg => 
-                            msg.id === assistantMessageId ? { ...msg, content: aiResponseText } : msg
-                        );
-                    } else {
-                        // If it doesn't exist yet, force React to create it right now
-                        return [...prev, { id: assistantMessageId, role: 'assistant', content: aiResponseText }];
-                    }
-                });
+                // 🚨 Update the live answer state so it appears letter-by-letter
+                setLiveAnswer(accumulatedText);
             }
 
-            speakText(aiResponseText);
+            // 🚨 ONCE FINISHED: Move live text to permanent history and clear live state
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: accumulatedText }]);
+            setLiveAnswer(""); 
+            speakText(accumulatedText);
 
-        // 🚨 CLAUDE'S GUARDRAIL ADDED HERE
         } catch (error) {
             let msg = error.message;    
             try { 
@@ -167,8 +154,8 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 5.1</h1>
-                        <p style={{ color: '#94a3b8' }}>Fixed Vanilla React Override</p>
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 5.2</h1>
+                        <p style={{ color: '#94a3b8' }}>Live Stream Fix</p>
                         
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -240,7 +227,22 @@ export default function InterviewApp() {
                                     </div>
                                 );
                             })}
-                            {isLoading && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
+
+                            {/* 🚨 THIS DRAWS THE LIVE TYPING TEXT */}
+                            {liveAnswer && (
+                                <div style={{ 
+                                    alignSelf: 'flex-start', 
+                                    background: '#1e293b', 
+                                    color: '#fff', 
+                                    padding: '15px 20px', 
+                                    borderRadius: '15px', 
+                                    maxWidth: '90%'
+                                }}>
+                                    <ReactMarkdown>{liveAnswer}</ReactMarkdown>
+                                </div>
+                            )}
+
+                            {isLoading && !liveAnswer && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
                             <div ref={messagesEndRef} />
                         </div>
                     </div>
