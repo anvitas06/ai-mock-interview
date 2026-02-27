@@ -14,6 +14,8 @@ export default function InterviewApp() {
     const [timeLeft, setTimeLeft] = useState(300); 
     const [timerActive, setTimerActive] = useState(false);
     const timerRef = useRef(null);
+    const [questionCount, setQuestionCount] = useState(0); // 0 = Background phase
+const [isInterviewComplete, setIsInterviewComplete] = useState(false);
     
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -94,16 +96,15 @@ export default function InterviewApp() {
         stopVoice();
         setSelectedRole(role);
         setView('interview');
-        setTextInput(""); 
+        setQuestionCount(0); // Start at background check
         setMessages([]);
         
-        const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
-        setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
+        const introMsg = `Hello. I am your ${level} Mentor for ${role}. Before we begin the technical assessment, please tell me a bit about your background and experience.`;
+        setMessages([{ id: Date.now().toString(), role: 'assistant', content: introMsg }]);
         
         setTimeLeft(300);
         setTimerActive(true);
-        
-        setTimeout(() => speakText(firstMsg), 500);
+        setTimeout(() => speakText(introMsg), 500);
     };
 
     const handleFinalSubmit = async (e) => {
@@ -283,24 +284,29 @@ export default function InterviewApp() {
                             border: '0.5px solid rgba(234, 214, 208, 0.1)'
                         }}>
                             {messages?.map((m) => {
-                                const isReport = m.content?.includes("CANDIDATE ASSESSMENT REPORT");
-                                return (
-                                    <div key={m.id} style={{ 
-                                        alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                                        maxWidth: '85%',
-                                        padding: '20px 28px',
-                                        borderRadius: '24px',
-                                        background: m.role === 'user' ? '#EAD6D0' : (isReport ? 'rgba(61, 44, 63, 0.6)' : 'rgba(234, 214, 208, 0.05)'),
-                                        color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
-                                        border: m.role === 'assistant' && !isReport ? '0.5px solid rgba(234, 214, 208, 0.15)' : (isReport ? '0.5px solid rgba(234, 214, 208, 0.25)' : 'none'),
-                                        boxShadow: isReport ? '0 15px 45px rgba(0,0,0,0.3)' : 'none',
-                                        lineHeight: '1.7'
-                                    }}>
-                                        {isReport && <div style={{ color: '#EAD6D0', fontWeight: '900', marginBottom: '16px', borderBottom: '0.5px solid rgba(234, 214, 208, 0.2)', paddingBottom: '12px' }}>📊 ASSESSMENT REPORT</div>}
-                                        <ReactMarkdown>{m.content || ""}</ReactMarkdown>
-                                    </div>
-                                );
-                            })}
+    const isReport = m.content?.includes("ASSESSMENT REPORT");
+    return (
+        <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            key={m.id} 
+            style={{ 
+                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: isReport ? '100%' : '85%',
+                padding: '24px',
+                borderRadius: '24px',
+                // Blackcurrant for report, Oyster Pink for user
+                background: isReport ? 'rgba(61, 44, 63, 0.8)' : (m.role === 'user' ? '#EAD6D0' : 'rgba(234, 214, 208, 0.05)'),
+                color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
+                border: isReport ? '1px solid #EAD6D0' : '0.5px solid rgba(234, 214, 208, 0.1)',
+                boxShadow: isReport ? '0 20px 50px rgba(0,0,0,0.4)' : 'none',
+                lineHeight: '1.7'
+            }}
+        >
+            <ReactMarkdown>{m.content}</ReactMarkdown>
+        </motion.div>
+    );
+})}
 
                             {liveAnswer && (
                                 <div style={{ 
