@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base background - Deep Navy */
+    --background: #0f172a; 
+    
+    /* Your Custom Colors from Khroma */
+    --card-bg: #3d2c3f;    /* Blackcurrant */
+    --accent: #ead6d0;     /* Oyster Pink */
+    
+    /* Text Colors */
+    --foreground: #ead6d0; /* Soft Pink for primary text */
+    --muted: #94a3b8;      /* Slate for secondary text */
+  }
+
+  body {
+    @apply antialiased;
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
+/* 🚨 ADD THIS FOR THE AESTHETIC TEXTURE */
+@layer utilities {
+  .premium-noise {
+    background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
+    opacity: 0.02; /* Keeps it very subtle and classy */
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+}
