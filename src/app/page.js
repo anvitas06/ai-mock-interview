@@ -109,59 +109,66 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
 
     const handleFinalSubmit = async (e) => {
         e.preventDefault();
+        if (!textInput.trim() || isLoading || isInterviewComplete) return;
+    
         stopVoice();
-        
         clearInterval(timerRef.current);
         setTimerActive(false);
-
-        if (isListening) recognitionRef.current?.stop();
-        if (!textInput.trim() || isLoading) return;
-        
+    
         const userText = textInput;
-        setTextInput(""); 
+        setTextInput("");
         setIsLoading(true);
-        setLiveAnswer(""); 
-
+        setLiveAnswer("");
+    
         const updatedMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
         setMessages(updatedMessages);
-
-        let response; 
+    
+        // 🚨 Logic to decide if we need a question or a report
+        const nextCount = questionCount + 1;
+        setQuestionCount(nextCount);
+    
+        let promptSuffix = "";
+        if (nextCount === 5) {
+            promptSuffix = " [FINAL QUESTION: Now, instead of a question, provide a detailed CANDIDATE ASSESSMENT REPORT. Include: 1. Overall Score (X/10), 2. Strengths, 3. Areas for Improvement, 4. Job Readiness, and 5. Conclusion.]";
+        }
+    
         try {
-            response = await fetch('/api/chat', {
+            const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    messages: updatedMessages.map(({ role, content }) => ({ role, content })), 
+                    messages: updatedMessages.map(m => ({
+                        role: m.role,
+                        content: m.role === 'user' && nextCount === 5 ? m.content + promptSuffix : m.content
+                    })), 
                     role: selectedRole, 
                     level: level 
                 }),
             });
-
-            if (!response.ok) throw new Error(`Server failed with status: ${response.status}`);
-
+    
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let accumulatedText = "";
-
+    
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                accumulatedText += chunk;
+                accumulatedText += decoder.decode(value, { stream: true });
                 setLiveAnswer(accumulatedText);
             }
-
+    
             setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: accumulatedText }]);
-            setLiveAnswer(""); 
+            setLiveAnswer("");
             speakText(accumulatedText);
-
-            if (!accumulatedText.includes("Score:")) {
+    
+            if (nextCount < 5) {
                 setTimeLeft(300);
                 setTimerActive(true);
+            } else {
+                setIsInterviewComplete(true);
             }
-
         } catch (error) {
-            alert("NETWORK ERROR: " + error.message);
+            alert("Error: " + error.message);
         } finally {
             setIsLoading(false);
         }
@@ -286,25 +293,19 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                             {messages?.map((m) => {
     const isReport = m.content?.includes("ASSESSMENT REPORT");
     return (
-        <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            key={m.id} 
-            style={{ 
-                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: isReport ? '100%' : '85%',
-                padding: '24px',
-                borderRadius: '24px',
-                // Blackcurrant for report, Oyster Pink for user
-                background: isReport ? 'rgba(61, 44, 63, 0.8)' : (m.role === 'user' ? '#EAD6D0' : 'rgba(234, 214, 208, 0.05)'),
-                color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
-                border: isReport ? '1px solid #EAD6D0' : '0.5px solid rgba(234, 214, 208, 0.1)',
-                boxShadow: isReport ? '0 20px 50px rgba(0,0,0,0.4)' : 'none',
-                lineHeight: '1.7'
-            }}
-        >
+        <div key={m.id} style={{ 
+            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: isReport ? '100%' : '85%',
+            padding: '28px',
+            borderRadius: '24px',
+            background: isReport ? 'rgba(61, 44, 63, 0.7)' : (m.role === 'user' ? '#EAD6D0' : 'rgba(234, 214, 208, 0.05)'),
+            color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
+            border: isReport ? '1px solid #EAD6D0' : '0.5px solid rgba(234, 214, 208, 0.1)',
+            boxShadow: isReport ? '0 20px 50px rgba(0,0,0,0.3)' : 'none',
+        }}>
+            {isReport && <h3 style={{ marginBottom: '15px' }}>📊 Final Evaluation</h3>}
             <ReactMarkdown>{m.content}</ReactMarkdown>
-        </motion.div>
+        </div>
     );
 })}
 
