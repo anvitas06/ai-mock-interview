@@ -5,28 +5,41 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
-    const { messages } = await req.json();
+    const { messages, role, level } = await req.json();
     
-    if (!process.env.GROQ_API_KEY) {
-      return new Response(JSON.stringify({ error: "API Key missing in Vercel settings" }), { status: 500 });
-    }
+    const groq = createGroq({ apiKey: process.env.GROQ_API_KEY });
 
-    const groq = createGroq({
-      apiKey: process.env.GROQ_API_KEY,
-    });
+    // 🚨 COUNTING LOGIC: How many questions has the AI already asked?
+    const aiQuestions = messages.filter(m => m.role === 'assistant').length;
+
+    let systemInstruction = `You are a strict technical interviewer for a ${level} ${role} position. Ask exactly one short technical question.`;
+
+    // 🚨 TRIGGER AFTER 3 QUESTIONS
+    if (aiQuestions >= 3) {
+      systemInstruction = `THE INTERVIEW IS OVER. 
+      Analyze the candidate's performance based on:
+      1. Technical Accuracy.
+      2. Communication Speed (Note if they hit the 5-minute time limit).
+      
+      Structure your response exactly like this:
+      📊 INTERVIEW REPORT
+      
+      - **Good Qualities**: [List 2]
+      - **Bad Qualities**: [List 2]
+      - **Improvements**: [Specific technical advice]
+      - **Conclusion**: [Final thoughts on hireability]
+      
+      Score: X/10`;
+    }
 
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
-      system: "You are a technical interviewer.",
+      system: systemInstruction,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
     });
 
-    // 🚨 MANUALLY PIPE THE STREAM
-    // This bypasses the "toDataStreamResponse is not a function" error entirely
     return new Response(result.textStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-      },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
 
   } catch (error) {

@@ -10,15 +10,40 @@ export default function InterviewApp() {
     const [isListening, setIsListening] = useState(false);
     const [textInput, setTextInput] = useState(""); 
     
-    // 🚨 STATE FOR MESSAGES AND LIVE TYPING
+    // Timer States
+    const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+    const [timerActive, setTimerActive] = useState(false);
+    const timerRef = useRef(null);
+    
+    // Chat States
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [liveAnswer, setLiveAnswer] = useState(""); // 🚨 ADDED: This shows the text while it's typing
+    const [liveAnswer, setLiveAnswer] = useState(""); 
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
 
     useEffect(() => { setIsMounted(true); }, []);
+
+    // Timer Logic
+    useEffect(() => {
+        if (timerActive && timeLeft > 0) {
+            timerRef.current = setInterval(() => {
+                setTimeLeft((prev) => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0 && timerActive) {
+            handleTimeUp();
+        }
+        return () => clearInterval(timerRef.current);
+    }, [timerActive, timeLeft]);
+
+    const handleTimeUp = () => {
+        clearInterval(timerRef.current);
+        setTimerActive(false);
+        const timeoutEvent = { preventDefault: () => {} };
+        setTextInput("TIME EXPIRED: Candidate did not answer in time.");
+        handleFinalSubmit(timeoutEvent);
+    };
 
     const stopVoice = () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -43,28 +68,23 @@ export default function InterviewApp() {
             recognitionRef.current?.stop();
             return;
         }
-
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             alert("Your browser does not support speech recognition.");
             return;
         }
-
         stopVoice(); 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
         recognition.lang = 'en-US';
         recognition.continuous = false;
-
         recognition.onstart = () => setIsListening(true);
         recognition.onend = () => setIsListening(false);
         recognition.onerror = () => setIsListening(false);
-        
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
             setTextInput(prev => prev ? prev + " " + transcript : transcript);
         };
-
         recognition.start();
     };
 
@@ -77,28 +97,38 @@ export default function InterviewApp() {
         setSelectedRole(role);
         setView('interview');
         setTextInput(""); 
+        setMessages([]);
         
         const firstMsg = `Hello. I am your ${level} Mentor for ${role}. Question 1: Tell me about your experience?`;
         setMessages([{ id: Date.now().toString(), role: 'assistant', content: firstMsg }]);
+        
+        // 🚨 Start Timer for first question
+        setTimeLeft(300);
+        setTimerActive(true);
+        
         setTimeout(() => speakText(firstMsg), 500);
     };
 
     const handleFinalSubmit = async (e) => {
         e.preventDefault();
         stopVoice();
+        
+        // 🚨 Stop current timer
+        clearInterval(timerRef.current);
+        setTimerActive(false);
+
         if (isListening) recognitionRef.current?.stop();
         if (!textInput.trim() || isLoading) return;
         
         const userText = textInput;
         setTextInput(""); 
         setIsLoading(true);
-        setLiveAnswer(""); // Reset live typing area
+        setLiveAnswer(""); 
 
         const updatedMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
         setMessages(updatedMessages);
 
         let response; 
-
         try {
             response = await fetch('/api/chat', {
                 method: 'POST',
@@ -110,38 +140,32 @@ export default function InterviewApp() {
                 }),
             });
 
-            if (!response.ok) {
-                throw new Error(`Server failed with status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Server failed with status: ${response.status}`);
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let accumulatedText = "";
 
-            // 🚨 RAW STREAM READING LOOP
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                
                 const chunk = decoder.decode(value, { stream: true });
                 accumulatedText += chunk;
-                
-                // 🚨 Update the live answer state so it appears letter-by-letter
                 setLiveAnswer(accumulatedText);
             }
 
-            // 🚨 ONCE FINISHED: Move live text to permanent history and clear live state
             setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: accumulatedText }]);
             setLiveAnswer(""); 
             speakText(accumulatedText);
 
+            // 🚨 Restart Timer for the next question (if not finished)
+            if (!accumulatedText.includes("Score:")) {
+                setTimeLeft(300);
+                setTimerActive(true);
+            }
+
         } catch (error) {
-            let msg = error.message;    
-            try { 
-                const d = await response?.json(); 
-                msg = d?.error || msg; 
-            } catch {}    
-            alert("NETWORK ERROR: " + msg);
+            alert("NETWORK ERROR: " + error.message);
         } finally {
             setIsLoading(false);
         }
@@ -154,15 +178,13 @@ export default function InterviewApp() {
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 5.2</h1>
-                        <p style={{ color: '#94a3b8' }}>Live Stream Fix</p>
-                        
+                        <h1 style={{ fontSize: '3.5rem', color: '#38bdf8' }}>Strict Mentor 5.5</h1>
+                        <p style={{ color: '#94a3b8' }}>Time-Pressure Mode</p>
                         <div style={{ margin: '40px 0' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
                                 <button key={l} onClick={() => setLevel(l)} style={{ margin: '0 5px', padding: '12px 25px', borderRadius: '25px', border: '1px solid #38bdf8', background: level === l ? '#38bdf8' : 'transparent', color: level === l ? '#0f172a' : '#38bdf8', cursor: 'pointer', fontWeight: 'bold' }}>{l}</button>
                              ))}
                         </div>
-                        
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                             {['React.js', 'Node.js', 'DSA', 'Java'].map((role) => (
                                 <button key={role} onClick={() => startInterview(role)} style={{ padding: '25px', background: '#1e293b', color: '#fff', borderRadius: '15px', border: '1px solid #334155', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem' }}>{role}</button>
@@ -176,21 +198,37 @@ export default function InterviewApp() {
                                 <h2 style={{ margin: 0 }}>{selectedRole}</h2>
                                 <span style={{ color: '#38bdf8', fontSize: '0.9rem' }}>{level} Level</span>
                             </div>
-                            <button onClick={() => { stopVoice(); setView('landing'); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer' }}>End Interview</button>
+                            <button onClick={() => { stopVoice(); setTimerActive(false); setView('landing'); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer' }}>End Interview</button>
                         </div>
                         
+                        {/* 🚨 TIMER UI COMPONENT */}
+                        <div style={{ 
+                            background: '#1e293b', 
+                            padding: '10px 20px', 
+                            borderRadius: '12px', 
+                            textAlign: 'center', 
+                            marginBottom: '15px',
+                            border: '1px solid',
+                            borderColor: timeLeft < 30 ? '#ef4444' : '#334155'
+                        }}>
+                            <span style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase' }}>Remaining Time</span>
+                            <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: timeLeft < 30 ? '#ef4444' : '#38bdf8' }}>
+                                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                            </div>
+                        </div>
+
                         <div style={{ background: '#1e293b', borderRadius: '20px', padding: '30px', textAlign: 'center', marginBottom: '20px', border: '1px solid #334155' }}>
-                            <div style={{ height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <button 
                                     type="button"
                                     onClick={startListening}
-                                    style={{ width: '80px', height: '80px', borderRadius: '50%', background: isListening ? '#ef4444' : '#38bdf8', border: 'none', cursor: 'pointer', fontSize: '30px', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    style={{ width: '60px', height: '60px', borderRadius: '50%', background: isListening ? '#ef4444' : '#38bdf8', border: 'none', cursor: 'pointer', fontSize: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                 >
                                     {isListening ? '🛑' : '🎤'}
                                 </button>
                             </div>
-                            <div style={{ color: '#94a3b8', fontStyle: 'italic', minHeight: '24px' }}>
-                                {isListening ? "Listening..." : "Tap mic to speak, or type below"}
+                            <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.9rem' }}>
+                                {isListening ? "Listening..." : "Tap mic to speak"}
                             </div>
                         </div>
 
@@ -200,9 +238,9 @@ export default function InterviewApp() {
                                 onChange={(e) => setTextInput(e.target.value)} 
                                 disabled={isLoading} 
                                 placeholder="Type your answer here..." 
-                                style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none', fontSize: '16px' }} 
+                                style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', paddingLeft: '15px', outline: 'none' }} 
                             />
-                            <button type="submit" disabled={isLoading || !textInput.trim()} style={{ background: (isLoading || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 30px', fontWeight: 'bold', cursor: (isLoading || !textInput.trim()) ? 'not-allowed' : 'pointer' }}>
+                            <button type="submit" disabled={isLoading || !textInput.trim()} style={{ background: (isLoading || !textInput.trim()) ? '#475569' : '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '25px', padding: '12px 25px', fontWeight: 'bold', cursor: 'pointer' }}>
                                 SEND
                             </button>
                         </form>
@@ -218,30 +256,18 @@ export default function InterviewApp() {
                                         padding: '15px 20px', 
                                         borderRadius: '15px', 
                                         maxWidth: '90%',
-                                        border: isReport ? '2px solid #38bdf8' : 'none',
-                                        fontFamily: isReport ? 'monospace' : 'inherit',
-                                        boxShadow: isReport ? '0 0 15px rgba(56, 189, 248, 0.1)' : 'none'
+                                        border: isReport ? '2px solid #38bdf8' : 'none'
                                     }}>
-                                        {isReport && <div style={{ color: '#38bdf8', fontWeight: 'bold', marginBottom: '10px', fontSize: '1.2rem', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>📊 INTERVIEW REPORT</div>}
+                                        {isReport && <div style={{ color: '#38bdf8', fontWeight: 'bold', marginBottom: '10px' }}>📊 INTERVIEW REPORT</div>}
                                         <ReactMarkdown>{m.content || ""}</ReactMarkdown>
                                     </div>
                                 );
                             })}
-
-                            {/* 🚨 THIS DRAWS THE LIVE TYPING TEXT */}
                             {liveAnswer && (
-                                <div style={{ 
-                                    alignSelf: 'flex-start', 
-                                    background: '#1e293b', 
-                                    color: '#fff', 
-                                    padding: '15px 20px', 
-                                    borderRadius: '15px', 
-                                    maxWidth: '90%'
-                                }}>
+                                <div style={{ alignSelf: 'flex-start', background: '#1e293b', color: '#fff', padding: '15px 20px', borderRadius: '15px', maxWidth: '90%' }}>
                                     <ReactMarkdown>{liveAnswer}</ReactMarkdown>
                                 </div>
                             )}
-
                             {isLoading && !liveAnswer && <div style={{ color: '#38bdf8', fontStyle: 'italic' }}>Evaluating...</div>}
                             <div ref={messagesEndRef} />
                         </div>
