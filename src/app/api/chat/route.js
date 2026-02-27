@@ -6,41 +6,31 @@ export const runtime = 'edge';
 
 export async function POST(req) {
   try {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error("GROQ_API_KEY is missing in Vercel Environment Variables!");
-
-    const groq = createGroq({ apiKey: apiKey });
     const { messages, role, level } = await req.json();
+    
+    const groq = createGroq({
+      apiKey: process.env.GROQ_API_KEY,
+    });
 
-    const aiQuestions = messages.filter(m => m.role === 'assistant');
-    const questionCount = aiQuestions.length;
-
-    let systemInstruction = `You are a strict technical interviewer. You are interviewing a ${level} candidate for a ${role} position. Ask exactly one technical question. Keep it brief. Do not provide the answer.`;
-
-    if (questionCount >= 3) {
-      systemInstruction = `THE INTERVIEW IS OVER. 
-      Do not ask any more questions.
-      Provide a concise summary of the candidate's performance based on their answers. 
-      List 1 strength and 1 area for improvement. 
-      You MUST end your response with the exact text: "Score: X/10" (replace X with their actual score based on a strict evaluation).`;
-    }
+    // We simplify the system instruction to ensure it doesn't cause a logic loop
+    const systemPrompt = `You are a technical interviewer for a ${level} ${role} position. Ask one question.`;
 
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
-      system: systemInstruction,
-      messages: messages.slice(-6), 
+      system: systemPrompt,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
     });
 
-    // 🚨 PURE TEXT STREAM (Removes all Vercel proprietary formatting)
+    // 🚨 We use result.textStream directly to ensure a pure text response
     return new Response(result.textStream, {
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      headers: { 
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      },
     });
 
   } catch (error) {
-    console.error("Backend Error Caught:", error);
-    return new Response(JSON.stringify({ error: `Backend Crash: ${error.message}` }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
