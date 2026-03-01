@@ -20,6 +20,7 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [liveAnswer, setLiveAnswer] = useState(""); 
+    const [voiceGender, setVoiceGender] = useState('female'); // Default to female
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
@@ -60,33 +61,30 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
 
     const speakText = (text) => {
         if (!text || typeof window === 'undefined' || !window.speechSynthesis) return;
-        window.speechSynthesis.cancel(); // Stop any current speaking
+        window.speechSynthesis.cancel();
         
-        // 1. Clean the text (remove markdown and labels)
         let cleanText = text.replace(/[*#`]/g, '').replace(/Question \d+:/gi, '').trim();
-        if (cleanText.includes("ASSESSMENT REPORT")) cleanText = "Interview complete. Reviewing your report.";
-    
         const utterance = new SpeechSynthesisUtterance(cleanText);
-    
-        // 2. 🚨 FIND THE "HUMAN" VOICES
         const voices = window.speechSynthesis.getVoices();
+    
+        // 🚨 DYNAMIC GENDER FILTER
+        const selectedVoice = voices.find(v => {
+            const name = v.name.toLowerCase();
+            const isEnglish = v.lang.includes('en');
+            
+            if (voiceGender === 'male') {
+                // Look for common male voice names or "Male" tags
+                return isEnglish && (name.includes('google us english') || name.includes('guy') || name.includes('david') || name.includes('male'));
+            } else {
+                // Look for common female voice names or "Female" tags
+                return isEnglish && (name.includes('google uk english female') || name.includes('zira') || name.includes('aria') || name.includes('female'));
+            }
+        });
+    
+        if (selectedVoice) utterance.voice = selectedVoice;
         
-        // Look for "Google" or "Natural" or "Microsoft Online" voices first
-        const premiumVoice = voices.find(v => 
-            (v.name.includes('Google') && v.lang.includes('en')) || 
-            (v.name.includes('Natural') && v.lang.includes('en')) ||
-            (v.name.includes('Microsoft') && v.name.includes('Online'))
-        );
-    
-        if (premiumVoice) {
-            utterance.voice = premiumVoice;
-        }
-    
-        // 3. 🚨 SET "STONE-FACED" SETTINGS
-        utterance.rate = 0.9;  // Slightly slower = more authoritative
-        utterance.pitch = 0.85; // Lower pitch = more serious/professional
-        utterance.volume = 1.0;
-    
+        utterance.rate = 0.9;
+        utterance.pitch = voiceGender === 'male' ? 0.8 : 1.0; // Slightly deeper for male
         window.speechSynthesis.speak(utterance);
     };
 
@@ -253,6 +251,36 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                                 }}>{l}</button>
                              ))}
                         </div>
+                        {/* 🎤 VOICE SELECTION SECTION */}
+<div style={{ marginTop: '30px', textAlign: 'center' }}>
+    <p style={{ color: '#EAD6D0', opacity: 0.6, fontSize: '0.8rem', marginBottom: '12px', letterSpacing: '0.1em' }}>
+        MENTOR VOICE
+    </p>
+    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+        {['female', 'male'].map((gender) => (
+            <motion.button
+                key={gender}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setVoiceGender(gender)}
+                style={{
+                    padding: '8px 20px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    background: voiceGender === gender ? '#EAD6D0' : 'transparent',
+                    color: voiceGender === gender ? '#3D2C3F' : '#EAD6D0',
+                    border: '0.5px solid rgba(234, 214, 208, 0.3)',
+                    fontSize: '0.8rem',
+                    textTransform: 'uppercase',
+                    fontWeight: '700',
+                    letterSpacing: '0.1em'
+                }}
+            >
+                {gender}
+            </motion.button>
+        ))}
+    </div>
+</div>
                         
                         {/* 🚨 FIXED: Grid is now exactly 2 columns wide */}
                         <div style={{ 
