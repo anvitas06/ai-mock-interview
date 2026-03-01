@@ -123,7 +123,8 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
 
     const handleFinalSubmit = async (e) => {
         e.preventDefault();
-        if (!textInput.trim() || isLoading || isInterviewComplete) return;
+        // Added a check to make sure selectedRole exists before running
+        if (!textInput.trim() || isLoading || isInterviewComplete || !selectedRole) return;
     
         stopVoice();
         clearInterval(timerRef.current);
@@ -134,40 +135,37 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         setIsLoading(true);
         setLiveAnswer("");
     
-        // 1. Save the user's message
         const newMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
         setMessages(newMessages);
     
-        // 2. Increment our question counter
         const nextCount = questionCount + 1;
         setQuestionCount(nextCount);
     
-        // 3. 🚨 THE ENFORCER: This invisible prompt mathematically forces the AI's behavior
-        let strictInstructions = `You are a strict, stone-faced technical interviewer for a ${level} ${role} position. 
-        RULE 1: NEVER give feedback, hints, or praise (Do not say "Good job", "Incorrect", or "Let's move on"). 
+        // 🚨 FIXED: Changed 'role' to 'selectedRole' to prevent the ReferenceError
+        let strictInstructions = `You are a strict, stone-faced technical interviewer for a ${level} ${selectedRole} position. 
+        RULE 1: NEVER give feedback, hints, or praise. 
         RULE 2: Be extremely brief and clinical. `;
     
         if (nextCount < 5) {
-            strictInstructions += `We are on Question ${nextCount} of 4. Acknowledge the user's previous answer silently, and IMMEDIATELY ask the next technical question. Format your response strictly as: "Question ${nextCount}: [Your Question Here]". Do not add any other text.`;
+            strictInstructions += `Ask Question ${nextCount} of 4. Format: "Question ${nextCount}: [Question]".`;
         } else {
-            strictInstructions += `The interview is over. Do NOT ask any more questions. Based on all previous answers, generate the final CANDIDATE ASSESSMENT REPORT. Format strictly with: 1. Overall Score (X/10), 2. Strengths, 3. Areas for Improvement, 4. Job Readiness, and 5. Conclusion.`;
+            strictInstructions += `Generate the final CANDIDATE ASSESSMENT REPORT now.`;
         }
     
-        // Append the invisible instruction as a system-like prompt for the backend
-        const apiMessages = [...newMessages, { role: 'user', content: `[SYSTEM INSTRUCTION: ${strictInstructions}]` }];
+        const apiMessages = [...newMessages, { role: 'user', content: `[SYSTEM: ${strictInstructions}]` }];
     
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    messages: apiMessages, // Send the hidden rules to the AI
-                    role: selectedRole, 
+                    messages: apiMessages.map(m => ({ role: m.role, content: m.content })), 
+                    role: selectedRole, // Ensure this matches your API expectations
                     level: level 
                 }),
             });
     
-            if (!response.ok) throw new Error("API Error");
+            if (!response.ok) throw new Error("API failed");
     
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -180,14 +178,10 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                 setLiveAnswer(accumulatedText);
             }
     
-            // Save the AI's response to the chat
             setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: accumulatedText }]);
             setLiveAnswer("");
-            
-            // Read the text aloud
             speakText(accumulatedText);
     
-            // Reset timer or end interview
             if (nextCount < 5) {
                 setTimeLeft(300);
                 setTimerActive(true);
@@ -195,7 +189,8 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                 setIsInterviewComplete(true);
             }
         } catch (error) {
-            alert("Error: " + error.message);
+            console.error("Fetch Error:", error);
+            setIsLoading(false); // 🚨 CRITICAL: This turns off "Analyzing" if the API fails
         } finally {
             setIsLoading(false);
         }
