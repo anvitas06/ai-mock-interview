@@ -37,6 +37,13 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         return () => clearInterval(timerRef.current);
     }, [timerActive, timeLeft]);
 
+    useEffect(() => {
+        // This pre-loads the voices so the 'find' logic works on the first click
+        const loadVoices = () => window.speechSynthesis.getVoices();
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+    }, []);
+
     const handleTimeUp = () => {
         clearInterval(timerRef.current);
         setTimerActive(false);
@@ -53,27 +60,33 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
 
     const speakText = (text) => {
         if (!text || typeof window === 'undefined' || !window.speechSynthesis) return;
-        stopVoice();
+        window.speechSynthesis.cancel(); // Stop any current speaking
         
-        // 1. Remove markdown formatting (*, #, `)
-        let cleanText = text.toString().replace(/[*#`]/g, '');
+        // 1. Clean the text (remove markdown and labels)
+        let cleanText = text.replace(/[*#`]/g, '').replace(/Question \d+:/gi, '').trim();
+        if (cleanText.includes("ASSESSMENT REPORT")) cleanText = "Interview complete. Reviewing your report.";
+    
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+        // 2. 🚨 FIND THE "HUMAN" VOICES
+        const voices = window.speechSynthesis.getVoices();
         
-        // 2. 🚨 Strip out "Question X:" from the spoken audio so it sounds natural
-        cleanText = cleanText.replace(/Question \d+:/gi, '').trim();
-        
-        // 3. Do not read the assessment report aloud (it's too long)
-        if (cleanText.includes("CANDIDATE ASSESSMENT REPORT") || cleanText.includes("Overall Score")) {
-            cleanText = "The interview is complete. Your assessment report has been generated.";
+        // Look for "Google" or "Natural" or "Microsoft Online" voices first
+        const premiumVoice = voices.find(v => 
+            (v.name.includes('Google') && v.lang.includes('en')) || 
+            (v.name.includes('Natural') && v.lang.includes('en')) ||
+            (v.name.includes('Microsoft') && v.name.includes('Online'))
+        );
+    
+        if (premiumVoice) {
+            utterance.voice = premiumVoice;
         }
     
-        if (!cleanText) return;
-        
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        const voices = window.speechSynthesis.getVoices();
-        // Try to find a serious, professional-sounding voice
-        utterance.voice = voices.find(v => v.lang.includes('en-GB') || v.lang.includes('en-US')) || voices[0];
-        utterance.rate = 0.95; // Slightly slower makes it sound more serious/strict
-        
+        // 3. 🚨 SET "STONE-FACED" SETTINGS
+        utterance.rate = 0.9;  // Slightly slower = more authoritative
+        utterance.pitch = 0.85; // Lower pitch = more serious/professional
+        utterance.volume = 1.0;
+    
         window.speechSynthesis.speak(utterance);
     };
 
