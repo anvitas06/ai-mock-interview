@@ -54,12 +54,26 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
     const speakText = (text) => {
         if (!text || typeof window === 'undefined' || !window.speechSynthesis) return;
         stopVoice();
-        const cleanText = text.toString().replace(/[*#`]/g, '').trim();
+        
+        // 1. Remove markdown formatting (*, #, `)
+        let cleanText = text.toString().replace(/[*#`]/g, '');
+        
+        // 2. 🚨 Strip out "Question X:" from the spoken audio so it sounds natural
+        cleanText = cleanText.replace(/Question \d+:/gi, '').trim();
+        
+        // 3. Do not read the assessment report aloud (it's too long)
+        if (cleanText.includes("CANDIDATE ASSESSMENT REPORT") || cleanText.includes("Overall Score")) {
+            cleanText = "The interview is complete. Your assessment report has been generated.";
+        }
+    
         if (!cleanText) return;
         
         const utterance = new SpeechSynthesisUtterance(cleanText);
         const voices = window.speechSynthesis.getVoices();
-        utterance.voice = voices.find(v => v.lang.includes('en-US')) || voices[0];
+        // Try to find a serious, professional-sounding voice
+        utterance.voice = voices.find(v => v.lang.includes('en-GB') || v.lang.includes('en-US')) || voices[0];
+        utterance.rate = 0.95; // Slightly slower makes it sound more serious/strict
+        
         window.speechSynthesis.speak(utterance);
     };
 
@@ -120,31 +134,40 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         setIsLoading(true);
         setLiveAnswer("");
     
-        const updatedMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
-        setMessages(updatedMessages);
+        // 1. Save the user's message
+        const newMessages = [...messages, { id: Date.now().toString(), role: 'user', content: userText }];
+        setMessages(newMessages);
     
-        // 🚨 Logic to decide if we need a question or a report
+        // 2. Increment our question counter
         const nextCount = questionCount + 1;
         setQuestionCount(nextCount);
     
-        let promptSuffix = "";
-        if (nextCount === 5) {
-            promptSuffix = " [FINAL QUESTION: Now, instead of a question, provide a detailed CANDIDATE ASSESSMENT REPORT. Include: 1. Overall Score (X/10), 2. Strengths, 3. Areas for Improvement, 4. Job Readiness, and 5. Conclusion.]";
+        // 3. 🚨 THE ENFORCER: This invisible prompt mathematically forces the AI's behavior
+        let strictInstructions = `You are a strict, stone-faced technical interviewer for a ${level} ${role} position. 
+        RULE 1: NEVER give feedback, hints, or praise (Do not say "Good job", "Incorrect", or "Let's move on"). 
+        RULE 2: Be extremely brief and clinical. `;
+    
+        if (nextCount < 5) {
+            strictInstructions += `We are on Question ${nextCount} of 4. Acknowledge the user's previous answer silently, and IMMEDIATELY ask the next technical question. Format your response strictly as: "Question ${nextCount}: [Your Question Here]". Do not add any other text.`;
+        } else {
+            strictInstructions += `The interview is over. Do NOT ask any more questions. Based on all previous answers, generate the final CANDIDATE ASSESSMENT REPORT. Format strictly with: 1. Overall Score (X/10), 2. Strengths, 3. Areas for Improvement, 4. Job Readiness, and 5. Conclusion.`;
         }
+    
+        // Append the invisible instruction as a system-like prompt for the backend
+        const apiMessages = [...newMessages, { role: 'user', content: `[SYSTEM INSTRUCTION: ${strictInstructions}]` }];
     
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    messages: updatedMessages.map(m => ({
-                        role: m.role,
-                        content: m.role === 'user' && nextCount === 5 ? m.content + promptSuffix : m.content
-                    })), 
+                    messages: apiMessages, // Send the hidden rules to the AI
                     role: selectedRole, 
                     level: level 
                 }),
             });
+    
+            if (!response.ok) throw new Error("API Error");
     
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -157,10 +180,14 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                 setLiveAnswer(accumulatedText);
             }
     
+            // Save the AI's response to the chat
             setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: accumulatedText }]);
             setLiveAnswer("");
+            
+            // Read the text aloud
             speakText(accumulatedText);
     
+            // Reset timer or end interview
             if (nextCount < 5) {
                 setTimeLeft(300);
                 setTimerActive(true);
