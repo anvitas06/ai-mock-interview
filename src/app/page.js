@@ -147,15 +147,22 @@ export default function InterviewApp() {
         const nextCount = questionCount + 1;
         setQuestionCount(nextCount);
     
-        let strictInstructions = `You are a strict, stone-faced technical interviewer for a ${level} ${selectedRole} position. 
-        RULE 1: NEVER give feedback, hints, or praise. 
-        RULE 2: Be extremely brief and clinical. `;
-    
-        if (nextCount < 5) {
-            strictInstructions += `Ask Question ${nextCount} of 4. Format: "Question ${nextCount}: [Question]".`;
-        } else {
-            strictInstructions += `Generate the final CANDIDATE ASSESSMENT REPORT now.`;
-        }
+        // 🚨 NEW PERSONA: "Elite Executive Mentor"
+let strictInstructions = `You are an elite Executive Interviewer for a ${level} ${selectedRole} position. 
+ROLE: Your tone is sophisticated, professional, and slightly intimidating but respectful.
+
+BEHAVIOR RULES:
+1. HUMAN ACKNOWLEDGMENT: Start every response with a VERY brief, professional acknowledgement of their previous answer (e.g., "Understood.", "That's a clear perspective.", or "I follow your logic.")
+2. NO CHITCHAT: Do not say "Great job" or "I love that." Keep it executive.
+3. TRANSITION: Move immediately to the next requirement.
+
+Current Flow: `;
+
+if (nextCount < 5) {
+    strictInstructions += `Acknowledge their answer in 5 words or less, then present Question ${nextCount} of 4.`;
+} else {
+    strictInstructions += `The interview is over. Do not ask more questions. Generate the final CANDIDATE ASSESSMENT REPORT.`;
+}
     
         const apiMessages = [...newMessages, { role: 'user', content: `[SYSTEM: ${strictInstructions}]` }];
     
