@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "AI Mock Interview",
-  description: "Get ready for your dream job",
+  title: 'Intervu | AI Technical Interview Simulator',
+  description: 'Master your next technical round with a stone-faced AI mentor. High-fidelity voice agent and detailed assessment reports.',
 };
 
 export default function RootLayout({ children }) {

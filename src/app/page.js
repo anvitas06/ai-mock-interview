@@ -14,13 +14,13 @@ export default function InterviewApp() {
     const [timeLeft, setTimeLeft] = useState(300); 
     const [timerActive, setTimerActive] = useState(false);
     const timerRef = useRef(null);
-    const [questionCount, setQuestionCount] = useState(0); // 0 = Background phase
-const [isInterviewComplete, setIsInterviewComplete] = useState(false);
+    const [questionCount, setQuestionCount] = useState(0); 
+    const [isInterviewComplete, setIsInterviewComplete] = useState(false);
     
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [liveAnswer, setLiveAnswer] = useState(""); 
-    const [voiceGender, setVoiceGender] = useState('female'); // Default to female
+    const [voiceGender, setVoiceGender] = useState('female'); 
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
@@ -39,7 +39,6 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
     }, [timerActive, timeLeft]);
 
     useEffect(() => {
-        // This pre-loads the voices so the 'find' logic works on the first click
         const loadVoices = () => window.speechSynthesis.getVoices();
         loadVoices();
         window.speechSynthesis.onvoiceschanged = loadVoices;
@@ -67,16 +66,13 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         const utterance = new SpeechSynthesisUtterance(cleanText);
         const voices = window.speechSynthesis.getVoices();
     
-        // 🚨 DYNAMIC GENDER FILTER
         const selectedVoice = voices.find(v => {
             const name = v.name.toLowerCase();
             const isEnglish = v.lang.includes('en');
             
             if (voiceGender === 'male') {
-                // Look for common male voice names or "Male" tags
                 return isEnglish && (name.includes('google us english') || name.includes('guy') || name.includes('david') || name.includes('male'));
             } else {
-                // Look for common female voice names or "Female" tags
                 return isEnglish && (name.includes('google uk english female') || name.includes('zira') || name.includes('aria') || name.includes('female'));
             }
         });
@@ -84,7 +80,7 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         if (selectedVoice) utterance.voice = selectedVoice;
         
         utterance.rate = 0.9;
-        utterance.pitch = voiceGender === 'male' ? 0.8 : 1.0; // Slightly deeper for male
+        utterance.pitch = voiceGender === 'male' ? 0.8 : 1.0; 
         window.speechSynthesis.speak(utterance);
     };
 
@@ -121,7 +117,7 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         stopVoice();
         setSelectedRole(role);
         setView('interview');
-        setQuestionCount(0); // Start at background check
+        setQuestionCount(0);
         setMessages([]);
         
         const introMsg = `Hello. I am your ${level} Mentor for ${role}. Before we begin the technical assessment, please tell me a bit about your background and experience.`;
@@ -134,7 +130,6 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
 
     const handleFinalSubmit = async (e) => {
         e.preventDefault();
-        // Added a check to make sure selectedRole exists before running
         if (!textInput.trim() || isLoading || isInterviewComplete || !selectedRole) return;
     
         stopVoice();
@@ -152,7 +147,6 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
         const nextCount = questionCount + 1;
         setQuestionCount(nextCount);
     
-        // 🚨 FIXED: Changed 'role' to 'selectedRole' to prevent the ReferenceError
         let strictInstructions = `You are a strict, stone-faced technical interviewer for a ${level} ${selectedRole} position. 
         RULE 1: NEVER give feedback, hints, or praise. 
         RULE 2: Be extremely brief and clinical. `;
@@ -171,7 +165,7 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     messages: apiMessages.map(m => ({ role: m.role, content: m.content })), 
-                    role: selectedRole, // Ensure this matches your API expectations
+                    role: selectedRole, 
                     level: level 
                 }),
             });
@@ -201,7 +195,7 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
             }
         } catch (error) {
             console.error("Fetch Error:", error);
-            setIsLoading(false); // 🚨 CRITICAL: This turns off "Analyzing" if the API fails
+            setIsLoading(false); 
         } finally {
             setIsLoading(false);
         }
@@ -221,21 +215,38 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
             <div style={{ maxWidth: '800px', margin: '0 auto', position: 'relative', zIndex: 10 }}>
                 {view === 'landing' ? (
                     <div style={{ textAlign: 'center', marginTop: '60px' }}>
-                        <h1 style={{ 
-                            fontSize: '4.5rem', 
-                            color: '#EAD6D0',
-                            fontWeight: '900',
-                            letterSpacing: '-0.04em',
-                            marginBottom: '12px',
-                            lineHeight: '1.1'
-                        }}>STRICT MENTOR</h1>
-                        <p style={{ 
-                            color: '#b5a0a8', 
-                            fontSize: '1.1rem', 
-                            marginBottom: '60px',
-                            letterSpacing: '0.05em',
-                            fontWeight: '300'
-                        }}>Professional AI Technical Assessment</p>
+                        <div style={{ textAlign: 'center', marginBottom: '50px' }}>
+                            <motion.h1 
+                                initial={{ opacity: 0, y: -20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                style={{ 
+                                    fontSize: '5rem', 
+                                    fontWeight: '800', 
+                                    color: '#EAD6D0', 
+                                    margin: '0',
+                                    letterSpacing: '-0.05em',
+                                    lineHeight: '1'
+                                }}
+                            >
+                                Intervu
+                            </motion.h1>
+                            <motion.p 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.2 }}
+                                style={{ 
+                                    color: '#EAD6D0', 
+                                    opacity: 0.6, 
+                                    fontSize: '0.9rem', 
+                                    marginTop: '12px',
+                                    fontWeight: '500',
+                                    letterSpacing: '0.2em',
+                                    textTransform: 'uppercase'
+                                }}
+                            >
+                                AI Technical Interview Simulator
+                            </motion.p>
+                        </div>
                         
                         <div style={{ margin: '60px 0', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                              {['Junior', 'Mid-Level', 'Senior'].map((l) => (
@@ -251,38 +262,37 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                                 }}>{l}</button>
                              ))}
                         </div>
-                        {/* 🎤 VOICE SELECTION SECTION */}
-<div style={{ marginTop: '30px', textAlign: 'center' }}>
-    <p style={{ color: '#EAD6D0', opacity: 0.6, fontSize: '0.8rem', marginBottom: '12px', letterSpacing: '0.1em' }}>
-        MENTOR VOICE
-    </p>
-    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-        {['female', 'male'].map((gender) => (
-            <motion.button
-                key={gender}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setVoiceGender(gender)}
-                style={{
-                    padding: '8px 20px',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    background: voiceGender === gender ? '#EAD6D0' : 'transparent',
-                    color: voiceGender === gender ? '#3D2C3F' : '#EAD6D0',
-                    border: '0.5px solid rgba(234, 214, 208, 0.3)',
-                    fontSize: '0.8rem',
-                    textTransform: 'uppercase',
-                    fontWeight: '700',
-                    letterSpacing: '0.1em'
-                }}
-            >
-                {gender}
-            </motion.button>
-        ))}
-    </div>
-</div>
+
+                        <div style={{ marginTop: '30px', textAlign: 'center', marginBottom: '40px' }}>
+                            <p style={{ color: '#EAD6D0', opacity: 0.6, fontSize: '0.8rem', marginBottom: '12px', letterSpacing: '0.1em' }}>
+                                MENTOR VOICE
+                            </p>
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                                {['female', 'male'].map((gender) => (
+                                    <motion.button
+                                        key={gender}
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={() => setVoiceGender(gender)}
+                                        style={{
+                                            padding: '8px 20px',
+                                            borderRadius: '12px',
+                                            cursor: 'pointer',
+                                            background: voiceGender === gender ? '#EAD6D0' : 'transparent',
+                                            color: voiceGender === gender ? '#3D2C3F' : '#EAD6D0',
+                                            border: '0.5px solid rgba(234, 214, 208, 0.3)',
+                                            fontSize: '0.8rem',
+                                            textTransform: 'uppercase',
+                                            fontWeight: '700',
+                                            letterSpacing: '0.1em'
+                                        }}
+                                    >
+                                        {gender}
+                                    </motion.button>
+                                ))}
+                            </div>
+                        </div>
                         
-                        {/* 🚨 FIXED: Grid is now exactly 2 columns wide */}
                         <div style={{ 
                             display: 'grid', 
                             gridTemplateColumns: '1fr 1fr', 
@@ -291,34 +301,28 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                             margin: '0 auto' 
                         }}>
                             {['React.js', 'Node.js', 'DSA', 'Java'].map((role) => (
-    <motion.button 
-        key={role} 
-        onClick={() => startInterview(role)} 
-        // 🚨 THIS IS THE "MICRO-INTERACTION"
-        whileHover={{ 
-            scale: 1.03, 
-            backgroundColor: "rgba(61, 44, 63, 0.4)",
-            boxShadow: "0 0 20px rgba(234, 214, 208, 0.1)"
-        }}
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: "spring", stiffness: 100, damping: 30 }}
-        // 🚨 THIS IS THE "AESTHETIC" STYLE
-        style={{ 
-            padding: '40px 20px', 
-            background: 'rgba(61, 44, 63, 0.25)',
-            backdropFilter: 'blur(10px)',
-            border: '0.5px solid rgba(234, 214, 208, 0.15)', 
-            borderRadius: '24px', 
-            color: '#EAD6D0', 
-            fontWeight: '700', 
-            fontSize: '1.2rem', 
-            cursor: 'pointer',
-            letterSpacing: '-0.03em'
-        }}
-    >
-        {role}
-    </motion.button>
-))}
+                                <motion.button 
+                                    key={role} 
+                                    onClick={() => startInterview(role)} 
+                                    whileHover={{ scale: 1.03, backgroundColor: "rgba(61, 44, 63, 0.4)", boxShadow: "0 0 20px rgba(234, 214, 208, 0.1)" }}
+                                    whileTap={{ scale: 0.97 }}
+                                    transition={{ type: "spring", stiffness: 100, damping: 30 }}
+                                    style={{ 
+                                        padding: '40px 20px', 
+                                        background: 'rgba(61, 44, 63, 0.25)',
+                                        backdropFilter: 'blur(10px)',
+                                        border: '0.5px solid rgba(234, 214, 208, 0.15)', 
+                                        borderRadius: '24px', 
+                                        color: '#EAD6D0', 
+                                        fontWeight: '700', 
+                                        fontSize: '1.2rem', 
+                                        cursor: 'pointer',
+                                        letterSpacing: '-0.03em'
+                                    }}
+                                >
+                                    {role}
+                                </motion.button>
+                            ))}
                         </div>
                     </div>
                 ) : (
@@ -332,7 +336,7 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                                 <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#b5a0a8', letterSpacing: '0.15em', display: 'block', marginBottom: '8px' }}>Time Remaining</span>
                                 <div style={{ 
                                     fontSize: '2.8rem', 
-                                    fontWeight: '900',
+                                    fontWeight: '900', 
                                     color: timeLeft < 30 ? '#ef4444' : '#EAD6D0',
                                     letterSpacing: '-0.04em'
                                 }}>
@@ -354,23 +358,23 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                             border: '0.5px solid rgba(234, 214, 208, 0.1)'
                         }}>
                             {messages?.map((m) => {
-    const isReport = m.content?.includes("ASSESSMENT REPORT");
-    return (
-        <div key={m.id} style={{ 
-            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: isReport ? '100%' : '85%',
-            padding: '28px',
-            borderRadius: '24px',
-            background: isReport ? 'rgba(61, 44, 63, 0.7)' : (m.role === 'user' ? '#EAD6D0' : 'rgba(234, 214, 208, 0.05)'),
-            color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
-            border: isReport ? '1px solid #EAD6D0' : '0.5px solid rgba(234, 214, 208, 0.1)',
-            boxShadow: isReport ? '0 20px 50px rgba(0,0,0,0.3)' : 'none',
-        }}>
-            {isReport && <h3 style={{ marginBottom: '15px' }}>📊 Final Evaluation</h3>}
-            <ReactMarkdown>{m.content}</ReactMarkdown>
-        </div>
-    );
-})}
+                                const isReport = m.content?.includes("ASSESSMENT REPORT");
+                                return (
+                                    <div key={m.id} style={{ 
+                                        alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                                        maxWidth: isReport ? '100%' : '85%',
+                                        padding: '28px',
+                                        borderRadius: '24px',
+                                        background: isReport ? 'rgba(61, 44, 63, 0.7)' : (m.role === 'user' ? '#EAD6D0' : 'rgba(234, 214, 208, 0.05)'),
+                                        color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
+                                        border: isReport ? '1px solid #EAD6D0' : '0.5px solid rgba(234, 214, 208, 0.1)',
+                                        boxShadow: isReport ? '0 20px 50px rgba(0,0,0,0.3)' : 'none',
+                                    }}>
+                                        {isReport && <h3 style={{ marginBottom: '15px' }}>📊 Final Evaluation</h3>}
+                                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                                    </div>
+                                );
+                            })}
 
                             {liveAnswer && (
                                 <div style={{ 
@@ -387,7 +391,31 @@ const [isInterviewComplete, setIsInterviewComplete] = useState(false);
                                 </div>
                             )}
 
-                            {isLoading && !liveAnswer && <div style={{ color: '#b5a0a8', fontStyle: 'italic' }}>Analyzing...</div>}
+                            {isLoading && !liveAnswer && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    style={{
+                                        alignSelf: 'flex-start',
+                                        padding: '20px 28px',
+                                        borderRadius: '24px',
+                                        background: 'rgba(234, 214, 208, 0.05)',
+                                        display: 'flex',
+                                        gap: '8px',
+                                        alignItems: 'center',
+                                        border: '0.5px solid rgba(234, 214, 208, 0.1)'
+                                    }}
+                                >
+                                    {[0, 1, 2].map((dot) => (
+                                        <motion.div
+                                            key={dot}
+                                            animate={{ opacity: [0.3, 1, 0.3] }}
+                                            transition={{ repeat: Infinity, duration: 1.5, delay: dot * 0.2 }}
+                                            style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#EAD6D0' }}
+                                        />
+                                    ))}
+                                </motion.div>
+                            )}
                             <div ref={messagesEndRef} />
                         </div>
 
