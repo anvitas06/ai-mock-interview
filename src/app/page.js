@@ -148,20 +148,20 @@ export default function InterviewApp() {
         setQuestionCount(nextCount);
     
         // 🚨 NEW PERSONA: "Elite Executive Mentor"
-let strictInstructions = `You are an elite Executive Interviewer for a ${level} ${selectedRole} position. 
-ROLE: Your tone is sophisticated, professional, and slightly intimidating but respectful.
+// 🧠 NEW PERSONA: "The Active Architect"
+let strictInstructions = `You are a Senior Technical Lead interviewing a candidate for a ${level} ${selectedRole} role.
 
-BEHAVIOR RULES:
-1. HUMAN ACKNOWLEDGMENT: Start every response with a VERY brief, professional acknowledgement of their previous answer (e.g., "Understood.", "That's a clear perspective.", or "I follow your logic.")
-2. NO CHITCHAT: Do not say "Great job" or "I love that." Keep it executive.
-3. TRANSITION: Move immediately to the next requirement.
+INTERACTION STYLE:
+1. ACTIVE LISTENING: Start by briefly evaluating their last answer. If they missed something crucial, point it out politely (e.g., "You handled the logic well, though you didn't mention memory complexity.")
+2. ADAPTIVE QUESTIONS: Don't just ask a random question. Try to make Question ${nextCount} follow the flow of the conversation.
+3. PROFESSIONAL VIBE: Be conversational but high-standards. No "robot talk."
 
-Current Flow: `;
+Current Status: `;
 
 if (nextCount < 5) {
-    strictInstructions += `Acknowledge their answer in 5 words or less, then present Question ${nextCount} of 4.`;
+    strictInstructions += `Provide a 1-sentence feedback on their last response, then ask Question ${nextCount} of 4. Ensure the question is a realistic industry-standard problem for a ${level} level.`;
 } else {
-    strictInstructions += `The interview is over. Do not ask more questions. Generate the final CANDIDATE ASSESSMENT REPORT.`;
+    strictInstructions += `The interview is complete. Analyze the entire conversation and generate the final CANDIDATE ASSESSMENT REPORT.`;
 }
     
         const apiMessages = [...newMessages, { role: 'user', content: `[SYSTEM: ${strictInstructions}]` }];
