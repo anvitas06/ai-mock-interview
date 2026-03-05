@@ -7,14 +7,18 @@ export async function POST(req) {
   try {
     const { messages, role, level } = await req.json();
     
+    // 🚨 NECESSARY ADDITION: Validate incoming data to prevent crashes
+    if (!messages || !Array.isArray(messages) || !role) {
+      return new Response(JSON.stringify({ error: "Invalid request data" }), { status: 400 });
+    }
+
     const groq = createGroq({ apiKey: process.env.GROQ_API_KEY });
 
-    // 🚨 COUNTING LOGIC: How many questions has the AI already asked?
+    // 🚨 YOUR ORIGINAL LOGIC (Unchanged)
     const aiQuestions = messages.filter(m => m.role === 'assistant').length;
 
     let systemInstruction = `You are a strict technical interviewer for a ${level} ${role} position. Ask exactly one short technical question.`;
 
-    // 🚨 TRIGGER AFTER 3 QUESTIONS
     if (aiQuestions >= 5) {
       systemInstruction = `THE INTERVIEW IS OVER. 
       Act as a Senior Technical Recruitment Manager. 
@@ -49,6 +53,8 @@ export async function POST(req) {
       model: groq('llama-3.3-70b-versatile'),
       system: systemInstruction,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
+      // 🚨 NECESSARY ADDITION: Max tokens to prevent cost spikes/infinite loops
+      maxTokens: 2000, 
     });
 
     return new Response(result.textStream, {
@@ -56,6 +62,8 @@ export async function POST(req) {
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    // 🚨 NECESSARY FIX: Return a generic message for security (don't leak error details)
+    console.error(error); 
+    return new Response(JSON.stringify({ error: "Failed to process interview request" }), { status: 500 });
   }
 }
