@@ -89,22 +89,28 @@ export default function InterviewApp() {
             recognitionRef.current?.stop();
             return;
         }
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert("Your browser does not support speech recognition.");
-            return;
-        }
-        stopVoice(); 
+        stopVoice(); // 🚨 KILL AI VOICE IMMEDIATELY WHEN USER STARTS
+        
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
         recognition.lang = 'en-US';
-        recognition.continuous = false;
+        
         recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = () => setIsListening(false);
+        
+        // 🚨 AUTOMATIC SUBMISSION: When the user stops talking, it sends automatically
+        recognition.onend = () => {
+            setIsListening(false);
+            if (textInput.trim()) {
+                // We simulate the form submit here
+                const syntheticEvent = { preventDefault: () => {} };
+                handleFinalSubmit(syntheticEvent);
+            }
+        };
+    
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            setTextInput(prev => prev ? prev + " " + transcript : transcript);
+            setTextInput(transcript); 
         };
         recognition.start();
     };
@@ -332,177 +338,70 @@ if (nextCount < 5) {
                             ))}
                         </div>
                     </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '85vh', gap: '24px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '16px', borderBottom: '0.5px solid rgba(234, 214, 208, 0.1)' }}>
-                            <div>
-                                <h2 style={{ margin: 0, fontSize: '2.2rem', fontWeight: '800', color: '#EAD6D0', letterSpacing: '-0.04em' }}>{selectedRole}</h2>
-                                <span style={{ color: '#b5a0a8', fontSize: '0.95rem' }}>{level} Proficiency Level</span>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#b5a0a8', letterSpacing: '0.15em', display: 'block', marginBottom: '8px' }}>Time Remaining</span>
-                                <div style={{ 
-                                    fontSize: '2.8rem', 
-                                    fontWeight: '900', 
-                                    color: timeLeft < 30 ? '#ef4444' : '#EAD6D0',
-                                    letterSpacing: '-0.04em'
-                                }}>
-                                    {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                                </div>
-                            </div>
+               ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', height: '85vh', gap: '24px' }}>
+                    
+                    {/* 1. KEEP YOUR HEADER (This shows the Role and Timer) */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '16px', borderBottom: '0.5px solid rgba(234, 214, 208, 0.1)' }}>
+                        <div>
+                            <h2 style={{ margin: 0, fontSize: '2.2rem', fontWeight: '800', color: '#EAD6D0', letterSpacing: '-0.04em' }}>{selectedRole}</h2>
+                            <span style={{ color: '#b5a0a8', fontSize: '0.95rem' }}>{level} Proficiency Level</span>
                         </div>
-                        
-                        <div style={{ 
-                            flex: 1, 
-                            overflowY: 'auto', 
-                            background: 'rgba(30, 41, 59, 0.35)',
-                            backdropFilter: 'blur(20px)',
-                            borderRadius: '32px', 
-                            padding: '40px', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '28px', 
-                            border: '0.5px solid rgba(234, 214, 208, 0.1)'
-                        }}>
-                            {messages?.map((m) => {
-                                const isReport = m.content?.includes("ASSESSMENT REPORT");
-                                return (
-                                    <div key={m.id} style={{ 
-                                        alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                                        maxWidth: isReport ? '100%' : '85%',
-                                        padding: '28px',
-                                        borderRadius: '24px',
-                                        background: isReport ? 'rgba(61, 44, 63, 0.7)' : (m.role === 'user' ? '#EAD6D0' : 'rgba(234, 214, 208, 0.05)'),
-                                        color: m.role === 'user' ? '#3D2C3F' : '#EAD6D0',
-                                        border: isReport ? '1px solid #EAD6D0' : '0.5px solid rgba(234, 214, 208, 0.1)',
-                                        boxShadow: isReport ? '0 20px 50px rgba(0,0,0,0.3)' : 'none',
-                                    }}>
-                                        {isReport && <h3 style={{ marginBottom: '15px' }}>📊 Final Evaluation</h3>}
-                                        <ReactMarkdown>{m.content}</ReactMarkdown>
-                                    </div>
-                                );
-                            })}
-
-                            {liveAnswer && (
-                                <div style={{ 
-                                    alignSelf: 'flex-start', 
-                                    background: 'rgba(234, 214, 208, 0.05)', 
-                                    color: '#EAD6D0', 
-                                    padding: '20px 28px', 
-                                    borderRadius: '24px', 
-                                    maxWidth: '85%',
-                                    border: '0.5px solid rgba(234, 214, 208, 0.15)',
-                                    backdropFilter: 'blur(8px)'
-                                }}>
-                                    <ReactMarkdown>{liveAnswer}</ReactMarkdown>
-                                </div>
-                            )}
-
-                            {isLoading && !liveAnswer && (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    style={{
-                                        alignSelf: 'flex-start',
-                                        padding: '20px 28px',
-                                        borderRadius: '24px',
-                                        background: 'rgba(234, 214, 208, 0.05)',
-                                        display: 'flex',
-                                        gap: '8px',
-                                        alignItems: 'center',
-                                        border: '0.5px solid rgba(234, 214, 208, 0.1)'
-                                    }}
-                                >
-                                    {[0, 1, 2].map((dot) => (
-                                        <motion.div
-                                            key={dot}
-                                            animate={{ opacity: [0.3, 1, 0.3] }}
-                                            transition={{ repeat: Infinity, duration: 1.5, delay: dot * 0.2 }}
-                                            style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#EAD6D0' }}
-                                        />
-                                    ))}
-                                </motion.div>
-                            )}
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                            <button 
-                                type="button"
-                                onClick={startListening}
-                                style={{ 
-                                    width: '62px', 
-                                    height: '62px', 
-                                    borderRadius: '50%', 
-                                    background: isListening ? '#ef4444' : 'rgba(61, 44, 63, 0.4)',
-                                    border: '0.5px solid rgba(234, 214, 208, 0.2)', 
-                                    cursor: 'pointer', 
-                                    fontSize: '22px', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                                }}
-                            >
-                                {isListening ? '🛑' : '🎤'}
-                            </button>
-
-                            <form onSubmit={handleFinalSubmit} style={{ 
-                                flex: 1, 
-                                display: 'flex', 
-                                gap: '12px', 
-                                background: 'rgba(61, 44, 63, 0.2)',
-                                padding: '10px 18px', 
-                                borderRadius: '22px', 
-                                border: '0.5px solid rgba(234, 214, 208, 0.15)'
-                            }}>
-                                <input 
-                                    value={textInput} 
-                                    onChange={(e) => setTextInput(e.target.value)} 
-                                    disabled={isLoading} 
-                                    placeholder="Type your technical response..." 
-                                    style={{ 
-                                        flex: 1, 
-                                        background: 'transparent', 
-                                        border: 'none', 
-                                        color: '#EAD6D0', 
-                                        paddingLeft: '8px', 
-                                        outline: 'none', 
-                                        fontSize: '0.95rem'
-                                    }}
-                                />
-                                <button 
-                                    type="submit" 
-                                    disabled={isLoading || !textInput.trim()}
-                                    style={{ 
-                                        background: (isLoading || !textInput.trim()) ? 'rgba(234, 214, 208, 0.1)' : '#EAD6D0', 
-                                        color: (isLoading || !textInput.trim()) ? '#b5a0a8' : '#3D2C3F', 
-                                        border: 'none', 
-                                        borderRadius: '14px', 
-                                        padding: '12px 26px', 
-                                        fontWeight: '800',
-                                        cursor: (isLoading || !textInput.trim()) ? 'not-allowed' : 'pointer', 
-                                        transition: 'all 0.3s ease'
-                                    }}>
-                                    SEND
-                                </button>
-                            </form>
-                            
-                            <button 
-                                onClick={() => { stopVoice(); setView('landing'); }} 
-                                style={{ 
-                                    background: 'transparent', 
-                                    color: '#ef4444', 
-                                    border: '0.5px solid #ef4444', 
-                                    padding: '12px 22px', 
-                                    borderRadius: '14px', 
-                                    cursor: 'pointer', 
-                                    fontWeight: '700', 
-                                    fontSize: '0.85rem'
-                                }}>EXIT</button>
+                        <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#b5a0a8', letterSpacing: '0.15em', display: 'block', marginBottom: '8px' }}>Time Remaining</span>
+                            <div style={{ fontSize: '2.8rem', fontWeight: '900', color: timeLeft < 30 ? '#ef4444' : '#EAD6D0' }}>
+                                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                            </div>
                         </div>
                     </div>
-                )}
+
+                    {/* 2. 🚨 PASTE THE VOICE CALL UI RIGHT HERE 🚨 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '40px' }}>
+                        <motion.div
+                            animate={{ 
+                                scale: isListening ? [1, 1.1, 1] : isLoading ? [1, 1.05, 1] : 1,
+                                boxShadow: isListening ? "0 0 60px rgba(234, 214, 208, 0.4)" : "0 0 20px rgba(234, 214, 208, 0.1)"
+                            }}
+                            transition={{ repeat: Infinity, duration: 1 }}
+                            style={{
+                                width: '240px', height: '240px', borderRadius: '50%',
+                                background: 'radial-gradient(circle, #EAD6D0 0%, #3D2C3F 100%)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}
+                        >
+                            <span style={{ fontSize: '4rem' }}>{isListening ? '🎙️' : isLoading ? '🧠' : '👤'}</span>
+                        </motion.div>
+
+                        <div style={{ textAlign: 'center' }}>
+                            <h2 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '10px' }}>
+                                {isListening ? "Listening..." : isLoading ? "Thinking..." : isInterviewComplete ? "Call Ended" : "Live Call"}
+                            </h2>
+                            <p style={{ opacity: 0.6, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+                                {isInterviewComplete ? "Generating Assessment" : "Stay Clear and Concise"}
+                            </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '20px' }}>
+                            {!isInterviewComplete && (
+                                <button 
+                                    onClick={startListening}
+                                    style={{ padding: '20px 40px', borderRadius: '40px', background: '#EAD6D0', color: '#3D2C3F', fontWeight: '800', border: 'none', cursor: 'pointer', fontSize: '1.1rem' }}
+                                >
+                                    {isListening ? "I'M LISTENING..." : "TAP TO RESPOND"}
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => { stopVoice(); setView('landing'); }}
+                                style={{ padding: '20px 40px', borderRadius: '40px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', fontWeight: '700', cursor: 'pointer' }}
+                            >
+                                {isInterviewComplete ? "BACK TO HOME" : "END CALL"}
+                            </button>
+                        </div>
+                    </div>
+                    {/* 🚨 END OF VOICE CALL UI 🚨 */}
+
+                </div>
+            )}
             </div>
         </div>
     );

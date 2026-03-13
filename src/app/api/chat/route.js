@@ -17,37 +17,19 @@ export async function POST(req) {
     // 🚨 YOUR ORIGINAL LOGIC (Unchanged)
     const aiQuestions = messages.filter(m => m.role === 'assistant').length;
 
-    let systemInstruction = `You are a strict technical interviewer for a ${level} ${role} position. Ask exactly one short technical question.`;
+    // 🚨 NEW CALL PERSONA: "The Verbal Architect"
+let systemInstruction = `You are conducting a LIVE VOICE CALL technical interview for a ${level} ${role}. 
+  
+RULES FOR VOICE INTERACTION:
+1. BREVITY: Responses must be under 30 words. No bullet points. No markdown.
+2. ACKNOWLEDGE: Briefly acknowledge their point (e.g., "Got it," or "Fair point") and then ask the next question immediately.
+3. FLOW: Keep the conversation moving. If they sound stuck, give a tiny hint and ask the next question.
 
-    if (aiQuestions >= 5) {
-      systemInstruction = `THE INTERVIEW IS OVER. 
-      Act as a Senior Technical Recruitment Manager. 
-      Provide a Formal Candidate Assessment Report based on the following criteria:
-      1. Technical Proficiency (Depth of knowledge)
-      2. Communication Articulation (Clarity and speed)
-      3. Time Management (Efficiency under 5-min pressure)
-      
-      Structure your response EXACTLY like this:
-      # CANDIDATE ASSESSMENT REPORT
-      
-      ### 1. Executive Summary
-      [Brief overview of candidate hireability]
-      
-      ### 2. Core Strengths
-      * [Strength 1]
-      * [Strength 2]
-      
-      ### 3. Areas for Development
-      * [Improvement 1]
-      * [Improvement 2]
-      
-      ### 4. Technical Performance Conclusion
-      [Detailed summary of bad vs good qualities]
-      
-      ---
-      **FINAL DECISION: [HIRE / DO NOT HIRE]**
-      **SCORE: X/10**`;
-    }
+Interview Phase: `;
+
+if (aiQuestions >= 5) {
+    systemInstruction = `The call is ending. Verbally summarize the performance and say goodbye. Then, generate the CANDIDATE ASSESSMENT REPORT.`;
+}
 
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
