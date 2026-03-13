@@ -21,6 +21,7 @@ export default function InterviewApp() {
     const [isLoading, setIsLoading] = useState(false);
     const [liveAnswer, setLiveAnswer] = useState(""); 
     const [voiceGender, setVoiceGender] = useState('female'); 
+    const [interimTranscript, setInterimTranscript] = useState(""); 
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
@@ -69,49 +70,54 @@ export default function InterviewApp() {
         const selectedVoice = voices.find(v => {
             const name = v.name.toLowerCase();
             const isEnglish = v.lang.includes('en');
-            
             if (voiceGender === 'male') {
-                return isEnglish && (name.includes('google us english') || name.includes('guy') || name.includes('david') || name.includes('male'));
+                return isEnglish && (name.includes('google us english') || name.includes('guy') || name.includes('david'));
             } else {
-                return isEnglish && (name.includes('google uk english female') || name.includes('zira') || name.includes('aria') || name.includes('female'));
+                return isEnglish && (name.includes('google uk english female') || name.includes('aria'));
             }
         });
     
         if (selectedVoice) utterance.voice = selectedVoice;
-        
         utterance.rate = 0.9;
-        utterance.pitch = voiceGender === 'male' ? 0.8 : 1.0; 
+        
+        utterance.onend = () => {
+            if (!isInterviewComplete) {
+                startListening(); 
+            }
+        };
+    
         window.speechSynthesis.speak(utterance);
     };
 
     const startListening = () => {
-        if (isListening) {
-            recognitionRef.current?.stop();
-            return;
-        }
-        stopVoice(); // 🚨 KILL AI VOICE IMMEDIATELY WHEN USER STARTS
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) return;
         
+        stopVoice(); 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
+        
         recognition.lang = 'en-US';
-        
-        recognition.onstart = () => setIsListening(true);
-        
-        // 🚨 AUTOMATIC SUBMISSION: When the user stops talking, it sends automatically
-        recognition.onend = () => {
-            setIsListening(false);
-            if (textInput.trim()) {
-                // We simulate the form submit here
-                const syntheticEvent = { preventDefault: () => {} };
-                handleFinalSubmit(syntheticEvent);
+        recognition.continuous = false; 
+        recognition.interimResults = true; 
+
+        recognition.onresult = (event) => {
+            let interim = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    const transcript = event.results[i][0].transcript;
+                    setTextInput(transcript);
+                    setInterimTranscript(""); 
+                    const syntheticEvent = { preventDefault: () => {} };
+                    handleFinalSubmit(syntheticEvent, transcript);
+                } else {
+                    interim += event.results[i][0].transcript;
+                    setInterimTranscript(interim); 
+                }
             }
         };
-    
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            setTextInput(transcript); 
-        };
+
+        recognition.onend = () => setIsListening(false);
         recognition.start();
     };
 
@@ -134,15 +140,16 @@ export default function InterviewApp() {
         setTimeout(() => speakText(introMsg), 500);
     };
 
-    const handleFinalSubmit = async (e) => {
-        e.preventDefault();
-        if (!textInput.trim() || isLoading || isInterviewComplete || !selectedRole) return;
+    const handleFinalSubmit = async (e, directTranscript = null) => {
+        if (e) e.preventDefault();
+        const finalPayload = directTranscript || textInput;
+        if (!finalPayload.trim() || isLoading || isInterviewComplete || !selectedRole) return;
     
         stopVoice();
         clearInterval(timerRef.current);
         setTimerActive(false);
     
-        const userText = textInput;
+        const userText = finalPayload;
         setTextInput("");
         setIsLoading(true);
         setLiveAnswer("");
@@ -153,22 +160,18 @@ export default function InterviewApp() {
         const nextCount = questionCount + 1;
         setQuestionCount(nextCount);
     
-        // 🚨 NEW PERSONA: "Elite Executive Mentor"
-// 🧠 NEW PERSONA: "The Active Architect"
-let strictInstructions = `You are a Senior Technical Lead interviewing a candidate for a ${level} ${selectedRole} role.
+        let strictInstructions = `You are a Senior Technical Lead interviewing a candidate for a ${level} ${selectedRole} role.
 
 INTERACTION STYLE:
-1. ACTIVE LISTENING: Start by briefly evaluating their last answer. If they missed something crucial, point it out politely (e.g., "You handled the logic well, though you didn't mention memory complexity.")
-2. ADAPTIVE QUESTIONS: Don't just ask a random question. Try to make Question ${nextCount} follow the flow of the conversation.
-3. PROFESSIONAL VIBE: Be conversational but high-standards. No "robot talk."
+1. ACTIVE LISTENING: Start by briefly evaluating their last answer.
+2. ADAPTIVE QUESTIONS: Follow the conversation flow.
+3. PROFESSIONAL VIBE: Conversational but high-standards. No robot talk.`;
 
-Current Status: `;
-
-if (nextCount < 5) {
-    strictInstructions += `Provide a 1-sentence feedback on their last response, then ask Question ${nextCount} of 4. Ensure the question is a realistic industry-standard problem for a ${level} level.`;
-} else {
-    strictInstructions += `The interview is complete. Analyze the entire conversation and generate the final CANDIDATE ASSESSMENT REPORT.`;
-}
+        if (nextCount < 5) {
+            strictInstructions += `Provide a 1-sentence feedback on their last response, then ask Question ${nextCount} of 4. Ensure the question is a realistic industry-standard problem for a ${level} level.`;
+        } else {
+            strictInstructions += `The interview is complete. Analyze the entire conversation and generate the final CANDIDATE ASSESSMENT REPORT.`;
+        }
     
         const apiMessages = [...newMessages, { role: 'user', content: `[SYSTEM: ${strictInstructions}]` }];
     
@@ -205,6 +208,15 @@ if (nextCount < 5) {
                 setTimerActive(true);
             } else {
                 setIsInterviewComplete(true);
+                const reportData = {
+                    id: Date.now(),
+                    role: selectedRole,
+                    level: level,
+                    date: new Date().toLocaleDateString(),
+                    content: accumulatedText
+                };
+                const existingHistory = JSON.parse(localStorage.getItem('intervu_history') || '[]');
+                localStorage.setItem('intervu_history', JSON.stringify([reportData, ...existingHistory]));
             }
         } catch (error) {
             console.error("Fetch Error:", error);
@@ -337,71 +349,135 @@ if (nextCount < 5) {
                                 </motion.button>
                             ))}
                         </div>
-                    </div>
-               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '85vh', gap: '24px' }}>
-                    
-                    {/* 1. KEEP YOUR HEADER (This shows the Role and Timer) */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '16px', borderBottom: '0.5px solid rgba(234, 214, 208, 0.1)' }}>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '2.2rem', fontWeight: '800', color: '#EAD6D0', letterSpacing: '-0.04em' }}>{selectedRole}</h2>
-                            <span style={{ color: '#b5a0a8', fontSize: '0.95rem' }}>{level} Proficiency Level</span>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#b5a0a8', letterSpacing: '0.15em', display: 'block', marginBottom: '8px' }}>Time Remaining</span>
-                            <div style={{ fontSize: '2.8rem', fontWeight: '900', color: timeLeft < 30 ? '#ef4444' : '#EAD6D0' }}>
-                                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 2. 🚨 PASTE THE VOICE CALL UI RIGHT HERE 🚨 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '40px' }}>
-                        <motion.div
-                            animate={{ 
-                                scale: isListening ? [1, 1.1, 1] : isLoading ? [1, 1.05, 1] : 1,
-                                boxShadow: isListening ? "0 0 60px rgba(234, 214, 208, 0.4)" : "0 0 20px rgba(234, 214, 208, 0.1)"
-                            }}
-                            transition={{ repeat: Infinity, duration: 1 }}
-                            style={{
-                                width: '240px', height: '240px', borderRadius: '50%',
-                                background: 'radial-gradient(circle, #EAD6D0 0%, #3D2C3F 100%)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}
+                        <button 
+                            onClick={() => setView('history')}
+                            style={{ marginTop: '30px', opacity: 0.6, background: 'transparent', border: 'none', color: '#EAD6D0', cursor: 'pointer', textDecoration: 'underline', width: '100%' }}
                         >
-                            <span style={{ fontSize: '4rem' }}>{isListening ? '🎙️' : isLoading ? '🧠' : '👤'}</span>
-                        </motion.div>
-
-                        <div style={{ textAlign: 'center' }}>
-                            <h2 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '10px' }}>
-                                {isListening ? "Listening..." : isLoading ? "Thinking..." : isInterviewComplete ? "Call Ended" : "Live Call"}
-                            </h2>
-                            <p style={{ opacity: 0.6, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
-                                {isInterviewComplete ? "Generating Assessment" : "Stay Clear and Concise"}
-                            </p>
+                            View Past Call Reports
+                        </button>
+                    </div>
+               ) : view === 'history' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h1 style={{ fontSize: '2.5rem', fontWeight: '900' }}>Call History</h1>
+                            <button onClick={() => setView('landing')} style={{ color: '#EAD6D0', background: 'rgba(234,214,208,0.1)', padding: '10px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer' }}>BACK</button>
                         </div>
-
-                        <div style={{ display: 'flex', gap: '20px' }}>
-                            {!isInterviewComplete && (
-                                <button 
-                                    onClick={startListening}
-                                    style={{ padding: '20px 40px', borderRadius: '40px', background: '#EAD6D0', color: '#3D2C3F', fontWeight: '800', border: 'none', cursor: 'pointer', fontSize: '1.1rem' }}
-                                >
-                                    {isListening ? "I'M LISTENING..." : "TAP TO RESPOND"}
-                                </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {typeof window !== 'undefined' && JSON.parse(localStorage.getItem('intervu_history') || '[]').length > 0 ? (
+                                JSON.parse(localStorage.getItem('intervu_history')).map((item) => (
+                                    <motion.div 
+                                        key={item.id}
+                                        whileHover={{ x: 10 }}
+                                        style={{ padding: '24px', background: 'rgba(61, 44, 63, 0.3)', borderRadius: '20px', border: '1px solid rgba(234, 214, 208, 0.1)', cursor: 'pointer' }}
+                                        onClick={() => {
+                                            setMessages([{ id: 'hist', role: 'assistant', content: item.content }]);
+                                            setSelectedRole(item.role);
+                                            setLevel(item.level);
+                                            setIsInterviewComplete(true);
+                                            setView('interview');
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <h3 style={{ margin: 0, fontSize: '1.4rem' }}>{item.role}</h3>
+                                                <span style={{ opacity: 0.6, fontSize: '0.9rem' }}>{item.level} • {item.date}</span>
+                                            </div>
+                                            <span>📄</span>
+                                        </div>
+                                    </motion.div>
+                                ))
+                            ) : (
+                                <p style={{ opacity: 0.5, textAlign: 'center', marginTop: '40px' }}>No past calls found.</p>
                             )}
-                            <button 
-                                onClick={() => { stopVoice(); setView('landing'); }}
-                                style={{ padding: '20px 40px', borderRadius: '40px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', fontWeight: '700', cursor: 'pointer' }}
-                            >
-                                {isInterviewComplete ? "BACK TO HOME" : "END CALL"}
-                            </button>
                         </div>
                     </div>
-                    {/* 🚨 END OF VOICE CALL UI 🚨 */}
-
-                </div>
-            )}
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '85vh', gap: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: '16px', borderBottom: '0.5px solid rgba(234, 214, 208, 0.1)' }}>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '2.2rem', fontWeight: '800', color: '#EAD6D0', letterSpacing: '-0.04em' }}>{selectedRole}</h2>
+                                <span style={{ color: '#b5a0a8', fontSize: '0.95rem' }}>{level} Proficiency</span>
+                            </div>
+                            {!isInterviewComplete && (
+                                <div style={{ textAlign: 'right' }}>
+                                    <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#b5a0a8', letterSpacing: '0.15em', display: 'block', marginBottom: '8px' }}>Time Remaining</span>
+                                    <div style={{ fontSize: '2.8rem', fontWeight: '900', color: timeLeft < 30 ? '#ef4444' : '#EAD6D0' }}>
+                                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                
+                        {!isInterviewComplete ? (
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '40px', position: 'relative' }}>
+                                <motion.div
+                                    animate={{ 
+                                        scale: isListening ? [1, 1.1, 1] : isLoading ? [1, 1.05, 1] : 1,
+                                        boxShadow: isListening ? "0 0 60px rgba(234, 214, 208, 0.4)" : "0 0 20px rgba(234, 214, 208, 0.1)"
+                                    }}
+                                    transition={{ repeat: Infinity, duration: 1 }}
+                                    style={{
+                                        width: '240px', height: '240px', borderRadius: '50%',
+                                        background: 'radial-gradient(circle, #EAD6D0 0%, #3D2C3F 100%)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}
+                                >
+                                    <span style={{ fontSize: '4rem' }}>{isListening ? '🎙️' : isLoading ? '🧠' : '👤'}</span>
+                                </motion.div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <h2 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '10px' }}>
+                                        {isListening ? "Listening..." : isLoading ? "Mentor is Thinking..." : "Live Call Active"}
+                                    </h2>
+                                </div>
+                                <div style={{ 
+                                    minHeight: '60px', 
+                                    width: '100%', 
+                                    textAlign: 'center', 
+                                    padding: '0 40px', 
+                                    fontSize: '1.2rem', 
+                                    fontStyle: 'italic', 
+                                    color: '#b5a0a8',
+                                    opacity: interimTranscript ? 1 : 0 
+                                }}>
+                                    "{interimTranscript}"
+                                </div>
+                                <button 
+                                    onClick={() => { stopVoice(); setView('landing'); }}
+                                    style={{ padding: '15px 40px', borderRadius: '40px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', fontWeight: '700', cursor: 'pointer' }}
+                                >
+                                    END CALL
+                                </button>
+                            </div>
+                        ) : (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                style={{ flex: 1, overflowY: 'auto', paddingRight: '10px' }}
+                            >
+                                <div style={{ 
+                                    background: 'rgba(30, 41, 59, 0.5)', 
+                                    backdropFilter: 'blur(20px)',
+                                    padding: '40px', 
+                                    borderRadius: '32px', 
+                                    border: '1px solid rgba(234, 214, 208, 0.2)' 
+                                }}>
+                                    <h1 style={{ fontSize: '2.5rem', marginBottom: '30px', fontWeight: '900' }}>Interview Summary</h1>
+                                    {messages.filter(m => m.content.includes("ASSESSMENT REPORT")).map((m) => (
+                                        <div key={m.id} className="prose prose-invert max-w-none" style={{ color: '#EAD6D0' }}>
+                                            <ReactMarkdown>{m.content}</ReactMarkdown>
+                                        </div>
+                                    ))}
+                                    <button 
+                                        onClick={() => { stopVoice(); setView('landing'); setIsInterviewComplete(false); }}
+                                        style={{ marginTop: '40px', width: '100%', padding: '20px', borderRadius: '20px', background: '#EAD6D0', color: '#3D2C3F', fontWeight: '800', border: 'none', cursor: 'pointer' }}
+                                    >
+                                        START NEW MOCK INTERVIEW
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
