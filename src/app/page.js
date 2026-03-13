@@ -25,6 +25,7 @@ export default function InterviewApp() {
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
+    const silenceTimerRef = useRef(null); // 🚨 ADDED: Timer for silence detection
 
     useEffect(() => { setIsMounted(true); }, []);
 
@@ -103,16 +104,31 @@ export default function InterviewApp() {
 
         recognition.onresult = (event) => {
             let interim = "";
+            
+            // 🚨 ADDED: Clear timer if user is still talking
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            
             for (let i = event.resultIndex; i < event.results.length; ++i) {
+                const transcript = event.results[i][0].transcript;
+                
                 if (event.results[i].isFinal) {
-                    const transcript = event.results[i][0].transcript;
                     setTextInput(transcript);
                     setInterimTranscript(""); 
                     const syntheticEvent = { preventDefault: () => {} };
                     handleFinalSubmit(syntheticEvent, transcript);
                 } else {
-                    interim += event.results[i][0].transcript;
+                    interim += transcript;
                     setInterimTranscript(interim); 
+                    
+                    // 🚨 ADDED: Force submit if silent for 1.5 seconds during interim
+                    silenceTimerRef.current = setTimeout(() => {
+                        if (interim.trim()) {
+                            recognition.stop();
+                            const syntheticEvent = { preventDefault: () => {} };
+                            handleFinalSubmit(syntheticEvent, interim);
+                            setInterimTranscript("");
+                        }
+                    }, 1500);
                 }
             }
         };
@@ -148,6 +164,9 @@ export default function InterviewApp() {
         stopVoice();
         clearInterval(timerRef.current);
         setTimerActive(false);
+        
+        // 🚨 ADDED: Ensure timer doesn't fire after submission
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     
         const userText = finalPayload;
         setTextInput("");
