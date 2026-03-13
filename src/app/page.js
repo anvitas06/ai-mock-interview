@@ -22,6 +22,8 @@ export default function InterviewApp() {
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
+    const silenceTimer = useRef(null);
+    const transcriptBuffer = useRef("");
 
     useEffect(() => { setIsMounted(true); }, []);
 
@@ -76,31 +78,46 @@ export default function InterviewApp() {
         recognitionRef.current = recognition;
         
         recognition.lang = 'en-US';
-        recognition.continuous = false; // Relies purely on the browser knowing you stopped talking
+        // 🚨 Set to true so the browser doesn't hang; WE control the stop now.
+        recognition.continuous = true; 
         recognition.interimResults = true; 
 
         recognition.onstart = () => {
             setIsListening(true);
             setInterimTranscript("");
+            transcriptBuffer.current = ""; // Reset buffer
         };
 
         recognition.onresult = (event) => {
-            let interim = "";
+            // 1. Clear the timer the millisecond it hears a new sound
+            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+
+            // 2. Gather the text
+            let currentTranscript = "";
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    const transcript = event.results[i][0].transcript;
-                    setTextInput(transcript);
-                    setInterimTranscript(""); 
-                    const syntheticEvent = { preventDefault: () => {} };
-                    handleFinalSubmit(syntheticEvent, transcript);
-                } else {
-                    interim += event.results[i][0].transcript;
-                    setInterimTranscript(interim); 
-                }
+                currentTranscript += event.results[i][0].transcript;
             }
+            
+            // 3. Store the text in a Ref (so the timer can access the latest version safely)
+            transcriptBuffer.current = currentTranscript;
+            setInterimTranscript(currentTranscript); 
+            
+            // 4. 🚨 THE FORCED TRIGGER: If no new words are spoken for 2 seconds, send it.
+            silenceTimer.current = setTimeout(() => {
+                if (transcriptBuffer.current.trim() && !isLoading) {
+                    recognition.stop(); // Kill the mic
+                    const syntheticEvent = { preventDefault: () => {} };
+                    handleFinalSubmit(syntheticEvent, transcriptBuffer.current); // Force send
+                    setInterimTranscript(""); // Clear subtitles
+                }
+            }, 2000); 
         };
 
-        recognition.onend = () => setIsListening(false);
+        recognition.onend = () => {
+            setIsListening(false);
+            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+        };
+        
         recognition.start();
     };
 
