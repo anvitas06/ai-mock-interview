@@ -11,9 +11,6 @@ export default function InterviewApp() {
     const [isListening, setIsListening] = useState(false);
     const [textInput, setTextInput] = useState(""); 
     
-    const [timeLeft, setTimeLeft] = useState(300); 
-    const [timerActive, setTimerActive] = useState(false);
-    const timerRef = useRef(null);
     const [questionCount, setQuestionCount] = useState(0); 
     const [isInterviewComplete, setIsInterviewComplete] = useState(false);
     
@@ -25,34 +22,14 @@ export default function InterviewApp() {
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
-    const silenceTimerRef = useRef(null); // 🚨 ADDED: Timer for silence detection
 
     useEffect(() => { setIsMounted(true); }, []);
-
-    useEffect(() => {
-        if (timerActive && timeLeft > 0) {
-            timerRef.current = setInterval(() => {
-                setTimeLeft((prev) => prev - 1);
-            }, 1000);
-        } else if (timeLeft === 0 && timerActive) {
-            handleTimeUp();
-        }
-        return () => clearInterval(timerRef.current);
-    }, [timerActive, timeLeft]);
 
     useEffect(() => {
         const loadVoices = () => window.speechSynthesis.getVoices();
         loadVoices();
         window.speechSynthesis.onvoiceschanged = loadVoices;
     }, []);
-
-    const handleTimeUp = () => {
-        clearInterval(timerRef.current);
-        setTimerActive(false);
-        const timeoutEvent = { preventDefault: () => {} };
-        setTextInput("TIME EXPIRED: Candidate did not answer in time.");
-        handleFinalSubmit(timeoutEvent);
-    };
 
     const stopVoice = () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -99,49 +76,27 @@ export default function InterviewApp() {
         recognitionRef.current = recognition;
         
         recognition.lang = 'en-US';
-        // 🚨 Set to true so the browser doesn't randomly cut you off; WE control the stop now.
-        recognition.continuous = true; 
+        recognition.continuous = false; // Relies purely on the browser knowing you stopped talking
         recognition.interimResults = true; 
 
         recognition.onstart = () => {
             setIsListening(true);
-            setInterimTranscript(""); // Clear old subtitles
-        };
-
-        // 🚨 Hardware fallback: If the browser's mic detects pure silence, stop listening.
-        recognition.onspeechend = () => {
-            recognition.stop();
+            setInterimTranscript("");
         };
 
         recognition.onresult = (event) => {
-            // 1. INSTANTLY clear the old timer the millisecond you make a new sound
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            
-            let currentText = "";
-            let isFinal = false;
-            
-            // 2. Gather the text properly without duplicating timers
+            let interim = "";
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                currentText += event.results[i][0].transcript;
-                if (event.results[i].isFinal) isFinal = true;
-            }
-            
-            setInterimTranscript(currentText); // Show live subtitles
-            
-            // 3. The precise submission logic
-            if (isFinal) {
-                recognition.stop();
-                handleFinalSubmit({ preventDefault: () => {} }, currentText);
-            } else {
-                // 🚨 THE FIX: Start a strict 1.5-second countdown outside the loop.
-                // If you don't say a word for 1.5 seconds, we force the AI to answer.
-                silenceTimerRef.current = setTimeout(() => {
-                    if (currentText.trim() && !isLoading) {
-                        recognition.stop();
-                        handleFinalSubmit({ preventDefault: () => {} }, currentText);
-                        setInterimTranscript(""); 
-                    }
-                }, 1500); 
+                if (event.results[i].isFinal) {
+                    const transcript = event.results[i][0].transcript;
+                    setTextInput(transcript);
+                    setInterimTranscript(""); 
+                    const syntheticEvent = { preventDefault: () => {} };
+                    handleFinalSubmit(syntheticEvent, transcript);
+                } else {
+                    interim += event.results[i][0].transcript;
+                    setInterimTranscript(interim); 
+                }
             }
         };
 
@@ -163,8 +118,6 @@ export default function InterviewApp() {
         const introMsg = `Hello. I am your ${level} Mentor for ${role}. Before we begin the technical assessment, please tell me a bit about your background and experience.`;
         setMessages([{ id: Date.now().toString(), role: 'assistant', content: introMsg }]);
         
-        setTimeLeft(300);
-        setTimerActive(true);
         setTimeout(() => speakText(introMsg), 500);
     };
 
@@ -174,11 +127,6 @@ export default function InterviewApp() {
         if (!finalPayload.trim() || isLoading || isInterviewComplete || !selectedRole) return;
     
         stopVoice();
-        clearInterval(timerRef.current);
-        setTimerActive(false);
-        
-        // 🚨 ADDED: Ensure timer doesn't fire after submission
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     
         const userText = finalPayload;
         setTextInput("");
@@ -234,10 +182,7 @@ INTERACTION STYLE:
             setLiveAnswer("");
             speakText(accumulatedText);
     
-            if (nextCount < 5) {
-                setTimeLeft(300);
-                setTimerActive(true);
-            } else {
+            if (nextCount >= 5) {
                 setIsInterviewComplete(true);
                 const reportData = {
                     id: Date.now(),
@@ -429,14 +374,6 @@ INTERACTION STYLE:
                                 <h2 style={{ margin: 0, fontSize: '2.2rem', fontWeight: '800', color: '#EAD6D0', letterSpacing: '-0.04em' }}>{selectedRole}</h2>
                                 <span style={{ color: '#b5a0a8', fontSize: '0.95rem' }}>{level} Proficiency</span>
                             </div>
-                            {!isInterviewComplete && (
-                                <div style={{ textAlign: 'right' }}>
-                                    <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#b5a0a8', letterSpacing: '0.15em', display: 'block', marginBottom: '8px' }}>Time Remaining</span>
-                                    <div style={{ fontSize: '2.8rem', fontWeight: '900', color: timeLeft < 30 ? '#ef4444' : '#EAD6D0' }}>
-                                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                                    </div>
-                                </div>
-                            )}
                         </div>
                 
                         {!isInterviewComplete ? (
