@@ -19,10 +19,13 @@ export default function InterviewApp() {
     const [liveAnswer, setLiveAnswer] = useState(""); 
     const [voiceGender, setVoiceGender] = useState('female'); 
     const [interimTranscript, setInterimTranscript] = useState(""); 
+    
+    // 🚨 NEW: The Watchdog Trigger State
+    const [forceSubmitText, setForceSubmitText] = useState(null); 
 
     const messagesEndRef = useRef(null);
     const recognitionRef = useRef(null);
-    const silenceTimer = useRef(null);
+    const silenceTimerRef = useRef(null);
     const transcriptBuffer = useRef("");
 
     useEffect(() => { setIsMounted(true); }, []);
@@ -32,6 +35,22 @@ export default function InterviewApp() {
         loadVoices();
         window.speechSynthesis.onvoiceschanged = loadVoices;
     }, []);
+
+    // 🚨 NEW: The Watchdog Effect. This safely submits the data 
+    // ensuring it always has the most up-to-date React state.
+    useEffect(() => {
+        if (forceSubmitText && !isLoading && !isInterviewComplete) {
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            recognitionRef.current?.stop(); 
+            
+            const textToSend = forceSubmitText;
+            setForceSubmitText(null); 
+            transcriptBuffer.current = ""; 
+            setInterimTranscript(""); 
+            
+            handleFinalSubmit({ preventDefault: () => {} }, textToSend);
+        }
+    }, [forceSubmitText, isLoading, isInterviewComplete]);
 
     const stopVoice = () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -78,44 +97,37 @@ export default function InterviewApp() {
         recognitionRef.current = recognition;
         
         recognition.lang = 'en-US';
-        // 🚨 Set to true so the browser doesn't hang; WE control the stop now.
-        recognition.continuous = true; 
+        recognition.continuous = true; // Browser stays open
         recognition.interimResults = true; 
 
         recognition.onstart = () => {
             setIsListening(true);
             setInterimTranscript("");
-            transcriptBuffer.current = ""; // Reset buffer
+            transcriptBuffer.current = "";
         };
 
         recognition.onresult = (event) => {
-            // 1. Clear the timer the millisecond it hears a new sound
-            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
-            // 2. Gather the text
             let currentTranscript = "";
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 currentTranscript += event.results[i][0].transcript;
             }
             
-            // 3. Store the text in a Ref (so the timer can access the latest version safely)
             transcriptBuffer.current = currentTranscript;
             setInterimTranscript(currentTranscript); 
             
-            // 4. 🚨 THE FORCED TRIGGER: If no new words are spoken for 2 seconds, send it.
-            silenceTimer.current = setTimeout(() => {
-                if (transcriptBuffer.current.trim() && !isLoading) {
-                    recognition.stop(); // Kill the mic
-                    const syntheticEvent = { preventDefault: () => {} };
-                    handleFinalSubmit(syntheticEvent, transcriptBuffer.current); // Force send
-                    setInterimTranscript(""); // Clear subtitles
+            // Wait exactly 2 seconds. If no sound, trigger the React Watchdog.
+            silenceTimerRef.current = setTimeout(() => {
+                if (transcriptBuffer.current.trim()) {
+                    setForceSubmitText(transcriptBuffer.current);
                 }
             }, 2000); 
         };
 
         recognition.onend = () => {
             setIsListening(false);
-            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         };
         
         recognition.start();
