@@ -99,37 +99,49 @@ export default function InterviewApp() {
         recognitionRef.current = recognition;
         
         recognition.lang = 'en-US';
-        recognition.continuous = false; 
+        // 🚨 Set to true so the browser doesn't randomly cut you off; WE control the stop now.
+        recognition.continuous = true; 
         recognition.interimResults = true; 
 
+        recognition.onstart = () => {
+            setIsListening(true);
+            setInterimTranscript(""); // Clear old subtitles
+        };
+
+        // 🚨 Hardware fallback: If the browser's mic detects pure silence, stop listening.
+        recognition.onspeechend = () => {
+            recognition.stop();
+        };
+
         recognition.onresult = (event) => {
-            let interim = "";
-            
-            // 🚨 ADDED: Clear timer if user is still talking
+            // 1. INSTANTLY clear the old timer the millisecond you make a new sound
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
             
+            let currentText = "";
+            let isFinal = false;
+            
+            // 2. Gather the text properly without duplicating timers
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                const transcript = event.results[i][0].transcript;
-                
-                if (event.results[i].isFinal) {
-                    setTextInput(transcript);
-                    setInterimTranscript(""); 
-                    const syntheticEvent = { preventDefault: () => {} };
-                    handleFinalSubmit(syntheticEvent, transcript);
-                } else {
-                    interim += transcript;
-                    setInterimTranscript(interim); 
-                    
-                    // 🚨 ADDED: Force submit if silent for 1.5 seconds during interim
-                    silenceTimerRef.current = setTimeout(() => {
-                        if (interim.trim()) {
-                            recognition.stop();
-                            const syntheticEvent = { preventDefault: () => {} };
-                            handleFinalSubmit(syntheticEvent, interim);
-                            setInterimTranscript("");
-                        }
-                    }, 1500);
-                }
+                currentText += event.results[i][0].transcript;
+                if (event.results[i].isFinal) isFinal = true;
+            }
+            
+            setInterimTranscript(currentText); // Show live subtitles
+            
+            // 3. The precise submission logic
+            if (isFinal) {
+                recognition.stop();
+                handleFinalSubmit({ preventDefault: () => {} }, currentText);
+            } else {
+                // 🚨 THE FIX: Start a strict 1.5-second countdown outside the loop.
+                // If you don't say a word for 1.5 seconds, we force the AI to answer.
+                silenceTimerRef.current = setTimeout(() => {
+                    if (currentText.trim() && !isLoading) {
+                        recognition.stop();
+                        handleFinalSubmit({ preventDefault: () => {} }, currentText);
+                        setInterimTranscript(""); 
+                    }
+                }, 1500); 
             }
         };
 
