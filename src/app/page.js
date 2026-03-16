@@ -20,7 +20,9 @@ export default function InterviewApp() {
     const [voiceGender, setVoiceGender] = useState('female'); 
     const [interimTranscript, setInterimTranscript] = useState(""); 
     
-    // 🚨 NEW: The Watchdog Trigger State
+    // 🚨 ADDED ONLY THIS: State for the interrupt button
+    const [isSpeaking, setIsSpeaking] = useState(false); 
+    
     const [forceSubmitText, setForceSubmitText] = useState(null); 
 
     const messagesEndRef = useRef(null);
@@ -36,8 +38,6 @@ export default function InterviewApp() {
         window.speechSynthesis.onvoiceschanged = loadVoices;
     }, []);
 
-    // 🚨 NEW: The Watchdog Effect. This safely submits the data 
-    // ensuring it always has the most up-to-date React state.
     useEffect(() => {
         if (forceSubmitText && !isLoading && !isInterviewComplete) {
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -55,6 +55,7 @@ export default function InterviewApp() {
     const stopVoice = () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
+            setIsSpeaking(false); // 🚨 ADDED ONLY THIS
         }
     };
 
@@ -79,7 +80,14 @@ export default function InterviewApp() {
         if (selectedVoice) utterance.voice = selectedVoice;
         utterance.rate = 0.9;
         
+        // 🚨 ADDED ONLY THIS: Tracks when AI starts speaking
+        utterance.onstart = () => {
+            setIsSpeaking(true);
+        };
+
+        // 🚨 ADDED ONLY THIS: Tracks when AI finishes
         utterance.onend = () => {
+            setIsSpeaking(false);
             if (!isInterviewComplete) {
                 startListening(); 
             }
@@ -97,7 +105,7 @@ export default function InterviewApp() {
         recognitionRef.current = recognition;
         
         recognition.lang = 'en-US';
-        recognition.continuous = true; // Browser stays open
+        recognition.continuous = true; 
         recognition.interimResults = true; 
 
         recognition.onstart = () => {
@@ -117,7 +125,6 @@ export default function InterviewApp() {
             transcriptBuffer.current = currentTranscript;
             setInterimTranscript(currentTranscript); 
             
-            // Wait exactly 2 seconds. If no sound, trigger the React Watchdog.
             silenceTimerRef.current = setTimeout(() => {
                 if (transcriptBuffer.current.trim()) {
                     setForceSubmitText(transcriptBuffer.current);
@@ -250,7 +257,7 @@ INTERACTION STYLE:
                                 initial={{ opacity: 0, y: -20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 style={{ 
-                                    fontSize: '5rem', 
+                                    fontSize: '6.5rem', // 🚨 CHANGED FROM 5rem to 6.5rem
                                     fontWeight: '800', 
                                     color: '#EAD6D0', 
                                     margin: '0',
@@ -438,6 +445,20 @@ INTERACTION STYLE:
                                 }}>
                                     "{interimTranscript}"
                                 </div>
+
+                                {/* 🚨 ADDED ONLY THIS: The Interrupt Button matching your styles */}
+                                {isSpeaking && (
+                                    <button 
+                                        onClick={() => { 
+                                            stopVoice(); 
+                                            startListening(); 
+                                        }}
+                                        style={{ padding: '15px 40px', borderRadius: '40px', background: 'transparent', color: '#EAD6D0', border: '1px solid #EAD6D0', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        ⏹ INTERRUPT
+                                    </button>
+                                )}
+
                                 <button 
                                     onClick={() => { stopVoice(); setView('landing'); }}
                                     style={{ padding: '15px 40px', borderRadius: '40px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', fontWeight: '700', cursor: 'pointer' }}
