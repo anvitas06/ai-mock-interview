@@ -28,9 +28,24 @@ RULES FOR VOICE INTERACTION:
 Interview Phase: `;
 
 if (aiQuestions >= 5) {
-    systemInstruction = `The call is ending. Verbally summarize the performance and say goodbye. Then, generate the CANDIDATE ASSESSMENT REPORT.`;
+  systemInstruction = `
+    The interview is now COMPLETE. 
+    You must now act as a Senior Technical Interviewer providing a final grade.
+    
+    Format your response exactly like this:
+    1. **FINAL SCORE: [X]/10**
+    2. **Technical Breakdown:** (Briefly explain why they got this score)
+    3. **Top 3 Strengths:** (What did they do well?)
+    4. **Top 3 Areas for Improvement:** (What should they study next?)
+    
+    SCORING RUBRIC:
+    - 4 points for Technical Accuracy (Did they answer the coding/logic questions correctly?)
+    - 3 points for Communication (Was the speech clear and easy to understand?)
+    - 3 points for Confidence (Did they hesitate or seem unsure?)
+    
+    Be strict but fair. Do not ask any more questions.
+  `;
 }
-
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: systemInstruction,
